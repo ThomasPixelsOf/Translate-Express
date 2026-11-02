@@ -127,9 +127,13 @@ How it works: `src/lib/ui-text.js` gives `twpUi.t("key", ...)` and fills `data-u
 
 Everything is dark at all times (message window, settings, dashboard, bubble, panels), whatever the browser theme.
 
+## Language names
+
+`src/lib/languages.js` keeps the list of language codes, the list Google supports, and a few name overrides. The names themselves come from the browser (`Intl.DisplayNames`), in the interface language, so any language the browser knows works without a table (the original project carried the names of 270 languages in 43 languages, 11,600 entries). The browser cannot name about 20 of the 270 codes (for example `alz`, `ber-Latn`), and writes Chinese as "Chinese (China)"/"Chinese (Taiwan)": `NAME_OVERRIDES` gives English and French names for those, and any other interface language falls back to the English name.
+
 ## What was removed
 
-After the first cut, a second clean-up removed the code of the original project that nothing could reach any more, because the screens that set it had been removed: the translation cache (it was never written, so every lookup missed), the original-text-on-hover feature, the custom dictionary and the "do not sort" option, the automatic translation rules by site and by language with the tab language detection, proxy servers, the three favourite languages list, platform helpers, and the special cases for PDF viewers and a few sites. About 2,000 lines went (7,300 to 5,300 lines of code, without the language-name table). The rest of this list is the first cut.
+After the first cut, a second clean-up removed the code of the original project that nothing could reach any more, because the screens that set it had been removed: the translation cache (it was never written, so every lookup missed), the original-text-on-hover feature, the custom dictionary and the "do not sort" option, the automatic translation rules by site and by language with the tab language detection, proxy servers, the three favourite languages list, platform helpers, and the special cases for PDF viewers and a few sites. About 2,000 lines went (7,300 to 5,300 lines of code, without the language-name table, which went from 12,000 lines to 235: see below). The rest of this list is the first cut.
 
 
 Popup (replaced by our own toolbar popup), options page, shortcuts, floating button, translation on hover, text to speech, the Bing, Yandex, DeepL and LibreTranslate services, polyfill, W3 style sheet, the original 40 interface languages and their `_locales` files (replaced by `src/lib/ui/`), build tools (gulp, webpack), donations, release notes. The removed code can be found in the first commit of this repository (the original project as is).
@@ -180,6 +184,6 @@ node --test "tests/*.test.js"
 
 ## Good to know
 
-- The tests (109) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 36 of them (page, panel, popup and settings) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- The tests (112) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 36 of them (page, panel, popup and settings) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: automatically sending back to Groq the texts that came back unchanged.
