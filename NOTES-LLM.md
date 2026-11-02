@@ -3,8 +3,8 @@
 Extension personnelle basée sur TWP (Translate Web Pages, branche `chrome-mv3` 10.2.5.0) ; numérotation de version propre : 1.0.0. Le nom « TWP » ne sert plus que pour désigner le code d'origine.
 
 
-Branche `minimal`, bâtie sur la branche `chrome-mv3` (version 10.2.5.0) de https://github.com/FilipePS/Traduzir-paginas-web.
-L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas de raccourcis clavier, pas de bouton flottant. Tout se fait par le **menu du clic droit**.
+Bâtie sur la branche `chrome-mv3` (version 10.2.5.0) de https://github.com/FilipePS/Traduzir-paginas-web. Le premier commit de ce dépôt est l'état exact du projet d'origine ; les suivants sont nos modifications.
+L'extension ne garde que l'essentiel : pas de popup du navigateur, pas de page d'options, pas de raccourcis clavier, pas de bouton flottant. Tout se fait par le **menu du clic droit**.
 
 ## Le menu du clic droit
 
@@ -81,7 +81,7 @@ Les blocs de texte déjà écrits dans la langue cible ne sont pas retraduits : 
 
 ## Ce qui a été retiré
 
-Popup, page d'options, raccourcis, bouton flottant, traduction au survol, synthèse vocale, services Bing, Yandex, DeepL et LibreTranslate, polyfill, feuille de style W3, 40 langues d'interface (restent l'anglais et le français), outils de construction (gulp, webpack), dons, notes de version. Le code est dans l'historique Git (branche `llm-groq-openrouter` pour la version précédente).
+Popup, page d'options, raccourcis, bouton flottant, traduction au survol, synthèse vocale, services Bing, Yandex, DeepL et LibreTranslate, polyfill, feuille de style W3, 40 langues d'interface (restent l'anglais et le français), outils de construction (gulp, webpack), dons, notes de version. Le code retiré se retrouve dans le premier commit de ce dépôt (le projet d'origine tel quel).
 
 ## Ce qui reste (tout le code utile)
 
@@ -124,17 +124,19 @@ Tout est sombre en permanence (message, réglages, tableau de bord, bulle, panne
 
 ## Mettre à jour depuis le dépôt d'origine
 
+Notre historique ne contient pas celui du projet d'origine (seulement son état 10.2.5.0 dans le premier commit), donc `git merge` ne s'applique pas. Pour reprendre une correction du projet d'origine :
+
 ```
-cd D:\Extension-traduction\depot
-git fetch origin
-git merge origin/chrome-mv3
+git remote add upstream https://github.com/FilipePS/Traduzir-paginas-web.git
+git fetch upstream chrome-mv3
+git diff <premier-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js src/contentScript/showOriginal.js
 node --test tests/
 ```
 
-Comme beaucoup de fichiers ont été supprimés, la fusion peut signaler des conflits sur les fichiers d'origine que nous avons retirés ou modifiés (`translationService.js`, `languages.js`, `config.js`, `manifest.json`) : garder notre version et ne reprendre que ce qui touche `pageTranslator.js`, `showOriginal.js` et la logique de traduction de Google.
+`<premier-commit>` est le tout premier commit de ce dépôt (`git rev-list --max-parents=0 HEAD`). Le diff montre ce qui a changé dans le projet d'origine depuis notre base ; on reprend à la main ce qui touche `pageTranslator.js`, `showOriginal.js` et la logique de traduction de Google, en gardant notre version du reste (beaucoup de fichiers ont été supprimés ou réécrits : `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
 
 ## À savoir
 
-- Les tests (13) vérifient le service IA, le manifeste, le démarrage du service worker et la création du menu avec de faux objets `chrome` ; ils ne remplacent pas un essai dans Brave.
+- Les tests (80) vérifient le service IA, le manifeste, le démarrage du service worker, le menu, la bulle, la traduction de page et le tableau de bord, avec de faux objets `chrome` ; 20 d'entre eux (page et bulle) demandent jsdom et sont ignorés s'il n'est pas installé. Ils ne remplacent pas un essai dans Brave.
 - Cause probable des lenteurs de Google : le service d'origine récupère une clé non officielle dans un fichier JavaScript de Google (adresse figée dans le code).
-- Pas encore fait : le texte de page parfois non capté (`pageTranslator.js`), la traduction de l'interface.
+- Pas fait : la traduction de l'interface de l'extension elle-même (anglais seulement) et le renvoi automatique à Groq des textes revenus à l'identique.
