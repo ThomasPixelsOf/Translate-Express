@@ -235,6 +235,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse(new URL(sender.tab.url).hostname);
   } else if (request.action === "thisFrameIsInFocus") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "anotherFrameIsInFocus" }, checkedLastError);
+  } else if (request.action === "twpFramePanel") {
+    // A frame of the page selected text: the panel is shown by the top page of the tab (so no frame edge can clip it).
+    const { action, ...payload } = request;
+    chrome.tabs.sendMessage(sender.tab.id, { ...payload, action: "twpPanelFromFrame", frameId: sender.frameId }, { frameId: 0 }, (answer) => {
+      void chrome.runtime.lastError;
+      sendResponse(!!answer);
+    });
+    return true;
+  } else if (request.action === "twpReplaceInFrame") {
+    chrome.tabs.sendMessage(sender.tab.id, { action: "twpReplaceFromPanel", text: request.text, scope: request.scope }, { frameId: request.frameId }, (done) => {
+      void chrome.runtime.lastError;
+      sendResponse(!!done);
+    });
+    return true;
   } else if (request.action === "twpOpenComposer") {
     openPopup("translate", { draft: request.text });
   }

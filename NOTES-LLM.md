@@ -112,6 +112,8 @@ The logo must appear wherever text can be selected, not on a list of known sites
 - **Selections made without the mouse**: Ctrl+A, touch, a script, an editor that hides mouse events. The `selectionchange` event shows the logo once the selection has settled for 350 ms and no mouse button is pressed.
 - **Shadow DOM**: the focused field and the selection are looked up through open shadow roots, since the page-level focus and selection only point at the host element.
 
+- **The panel is always shown in the top page.** A panel opened inside a small frame (the editing area of a rich-text editor) would be clipped by the frame's edges. A frame that has a selection asks the top page to show the panel: it finds where it sits by asking up the chain of parent frames (each parent matches the `<iframe>` element that holds the asking window, so it works across origins), sends the text and the position through the background (`twpFramePanel`), and the top page shows the panel at the right place. "Replace" goes back the same way (`twpReplaceInFrame`) and the frame replaces its own selection. If the top page does not answer within 400 ms, the frame shows the panel itself, as before. Covered by `tests/panel-frames.test.js`.
+
 Not covered: closed shadow roots and canvas-based editors (Google Docs draws its text itself, so there is no selectable text to read).
 
 ## Interface language

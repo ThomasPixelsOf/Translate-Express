@@ -207,6 +207,16 @@
     });
     ui.replace.addEventListener("click", () => {
       const text = ui.out.dataset.text;
+      if (remote && text) {
+        // The text is in another frame: ask it to replace its own selection.
+        const scope = ui.out.dataset.scope;
+        chrome.runtime.sendMessage({ action: "twpReplaceInFrame", frameId: remote.frameId, text, scope }, (done) => {
+          checkedLastError();
+          if (done) show(false);
+          else setStatus(twpUi.t("panelSelectionChanged"), true);
+        });
+        return;
+      }
       if (!field || !text) return;
       if (replaceInField(field, text, ui.out.dataset.scope === "selection")) show(false);
       else setStatus(twpUi.t("panelSelectionChanged"), true);
@@ -236,6 +246,7 @@
 
   // Ce qu'il faut traduire en ce moment.
   function currentSource() {
+    if (remote) return { text: selectionText, scope: remote.scope };
     if (mode === "field" && field && document.contains(field)) {
       const part = fieldSelection(field) || savedSelectionText;
       return part ? { text: part, scope: "selection" } : { text: getText(field), scope: "all" };
@@ -244,6 +255,9 @@
   }
 
   let anchorOverride = null; // location of the selected text at the moment of the click on the bubble
+  // Panel shown in the top page for text selected in another frame: { frameId, canReplace, scope }. A small frame (the
+  // editing area of a rich-text editor, an embedded widget...) would clip the panel, so the frame asks the top page to show it.
+  let remote = null;
 
   function anchorRect() {
     if (anchorOverride && (mode === "selection" || mode === "field")) return anchorOverride;
@@ -288,6 +302,81 @@
     ui.win.textContent = twpUi.t("panelWindow");
   }
 
+  // ---- frames: the panel is shown in the top page ----
+  const isTop = window === window.top;
+  const pendingOffsets = new Map();
+
+  // Where this frame's viewport is in the top page, found by asking up the chain of parent frames (works across origins:
+  // each parent finds the <iframe> element that holds the asking window).
+  function offsetInTop(callback) {
+    if (isTop) return callback({ x: 0, y: 0 });
+    const id = String(Math.random());
+    const timeout = setTimeout(() => {
+      pendingOffsets.delete(id);
+      callback(null);
+    }, 400);
+    pendingOffsets.set(id, (offset) => {
+      clearTimeout(timeout);
+      callback(offset);
+    });
+    try {
+      window.parent.postMessage({ twp: "offset?", id }, "*");
+    } catch (e) {
+      clearTimeout(timeout);
+      pendingOffsets.delete(id);
+      callback(null);
+    }
+  }
+
+  const onFrameMessage = (e) => {
+    const d = e.data;
+    if (!d || typeof d !== "object") return;
+    if (d.twp === "offset?" && typeof d.id === "string") {
+      let frameEl = null;
+      for (const f of document.querySelectorAll("iframe,frame")) {
+        if (f.contentWindow === e.source) {
+          frameEl = f;
+          break;
+        }
+      }
+      if (!frameEl) return; // not an iframe we can see (inside a shadow root...): the asking frame falls back to itself
+      const r = frameEl.getBoundingClientRect();
+      const own = { x: r.left + frameEl.clientLeft, y: r.top + frameEl.clientTop };
+      offsetInTop((up) => {
+        if (!up) return;
+        try {
+          e.source.postMessage({ twp: "offset", id: d.id, x: own.x + up.x, y: own.y + up.y }, "*");
+        } catch (err) {
+          /* the frame is gone */
+        }
+      });
+    } else if (d.twp === "offset" && pendingOffsets.has(d.id) && e.source === window.parent) {
+      const done = pendingOffsets.get(d.id);
+      pendingOffsets.delete(d.id);
+      done({ x: Number(d.x) || 0, y: Number(d.y) || 0 });
+    }
+  };
+
+  function presentPanel() {
+    remote = null;
+    if (isTop) return show(true);
+    const source = currentSource();
+    const local = anchorRect();
+    const canReplace = mode === "field" && !!field;
+    offsetInTop((offset) => {
+      if (!offset) return show(true); // the top page cannot be reached: show the panel here, as before
+      const rect = { left: local.left + offset.x, right: local.right + offset.x, top: local.top + offset.y, bottom: local.bottom + offset.y };
+      try {
+        chrome.runtime.sendMessage({ action: "twpFramePanel", mode, text: source.text, scope: source.scope, canReplace, rect }, (shown) => {
+          checkedLastError();
+          if (!shown) show(true);
+        });
+      } catch (e) {
+        show(true);
+      }
+    });
+  }
+
   function show(visible) {
     if (visible && !host) build();
     open = visible;
@@ -295,7 +384,7 @@
     ui.panel.style.display = visible ? "block" : "none";
     if (visible) {
       applyTexts();
-      ui.replace.hidden = mode !== "field";
+      ui.replace.hidden = !(mode === "field" && (!remote || remote.canReplace));
       ui.what.textContent = twpUi.t(mode === "field" ? "panelWriteIn" : "panelReadIn");
       ui.lang.value = currentLanguage() || ui.lang.value;
       place();
@@ -477,7 +566,7 @@
           savedSelectionText = "";
         }
         hideBubble();
-        show(true);
+        presentPanel();
       });
       document.documentElement.appendChild(host);
       bubble = { host, el, timer: null, text, info };
@@ -545,7 +634,7 @@
   };
   const onScroll = () => {
     hideBubble();
-    anchorOverride = null; // after scrolling, realign on the current selection
+    if (!remote) anchorOverride = null; // after scrolling, realign on the current selection
     place();
   };
 
@@ -563,6 +652,7 @@
       window.addEventListener(type, fn, true);
     }
     window.addEventListener("resize", place);
+    window.addEventListener("message", onFrameMessage);
     document.addEventListener("selectionchange", onSelectionChange);
   }
   attachListeners();
@@ -586,7 +676,26 @@
         if (!field || !document.contains(field)) field = isEditable(active) ? active : null;
         if (!field) mode = "selection"; // no field found: translate the selection if there is one
       }
+      presentPanel();
+    } else if (request.action === "twpPanelFromFrame") {
+      // A frame of this page selected some text: the panel is shown here, in the top page, so no frame edge can clip it.
+      if (!isTop) return;
+      remote = { frameId: request.frameId, canReplace: !!request.canReplace, scope: request.scope };
+      mode = request.mode;
+      selectionText = request.text || "";
+      anchorOverride = request.rect || null;
+      field = null;
+      savedSelectionText = "";
+      savedSelStart = null;
+      savedSelEnd = null;
+      savedRange = null;
       show(true);
+      sendResponse(true);
+    } else if (request.action === "twpReplaceFromPanel") {
+      // The panel (shown in the top page) asks this frame to replace the text it selected.
+      const el = field && document.contains(field) ? field : null;
+      if (!el) return; // another frame will answer
+      sendResponse(replaceInField(el, request.text, request.scope === "selection"));
     } else if (request.action === "twpInsertText") {
       // Insertion requested by the message window ("Insert in the page").
       const el = field && document.contains(field) ? field : null;
