@@ -97,7 +97,7 @@ var twpLlm = (function () {
   function estimerJetons(messages, modele) {
     const entree = messages.reduce((s, m) => s + m.content.length, 0) / 3;
     const texte = messages[messages.length - 1].content.length / 3;
-    return Math.ceil(entree + texte * 1.3 + (/gpt-oss|qwen/i.test(modele) ? 250 : 40));
+    return Math.ceil(entree + texte * 1.3 + (/gpt-oss|qwen/i.test(modele) ? 120 : 40));
   }
 
   // Nombre de requêtes prioritaires (ce qui est à l'écran) en attente de budget : celles du reste de la page attendent.

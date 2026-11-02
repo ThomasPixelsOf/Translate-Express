@@ -480,6 +480,12 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
     const pieceOf = new Map();
     piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((nd) => pieceOf.set(nd, ptt)));
+    // Texte original de chaque nœud écrit : permet de repérer ce qui a été « traduit » en gardant le même texte.
+    const originalOf = new Map();
+    for (const ntr of nodesToRestore) {
+      const written = ntr.node.nodeType === 3 ? ntr.node : ntr.node.firstChild;
+      if (written) originalOf.set(written, ntr.originalText);
+    }
 
     const counts = {};
     const excluded = {};
@@ -487,7 +493,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     const add = (category, node, extra) => {
       counts[category] = (counts[category] || 0) + 1;
       const list = (examples[category] = examples[category] || []);
-      if (list.length < 8) list.push({ text: node.nodeValue.trim().slice(0, 70), path: elementPath(node.parentElement), ...extra });
+      if (list.length < (category === "writtenUnchanged" ? 40 : 8)) list.push({ text: node.nodeValue.trim().slice(0, 70), path: elementPath(node.parentElement), ...extra });
     };
 
     for (const node of nodes) {
@@ -495,7 +501,12 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       if (!parent) continue;
       if (parent.closest("script,style,noscript,[data-twp-panel],[data-twp-dock],[data-twp-bubble]")) continue;
       if (writtenText.has(node)) {
-        counts.translated = (counts.translated || 0) + 1;
+        const before = originalOf.get(node);
+        if (before !== undefined && before.trim() === node.nodeValue.trim() && /[A-Za-z]{3,}/.test(before)) {
+          add("writtenUnchanged", node, { note: "written back identical to the original: the engine returned the same text", engine: currentPageTranslatorService });
+        } else {
+          counts.translated = (counts.translated || 0) + 1;
+        }
         continue;
       }
       const why = excludedReason(node);
