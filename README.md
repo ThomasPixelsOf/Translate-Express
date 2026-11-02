@@ -18,77 +18,35 @@ It is a fork of [TWP - Translate Web Pages](https://github.com/FilipePS/Traduzir
 ## How it fits together
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 28, "padding": 4}}}%%
 flowchart LR
-  user(["You"])
-
-  subgraph browser["Your browser"]
-    direction TB
-    popup["Toolbar popup<br/>Translate | Settings | Dashboard"]
-    menu["Right-click menu"]
-
-    subgraph page["Every page and frame"]
-      direction TB
-      translator["Page translator<br/>visible text first"]
-      logo["Selection logo<br/>and floating panel"]
-    end
-
-    subgraph worker["Service worker"]
-      direction TB
-      router["Translation router<br/>and cache"]
-      ai["AI service<br/>token budget, priorities,<br/>answer checks"]
-      free["Free translator"]
-      log["Diagnostic log"]
-    end
-
-    storage[("Extension storage<br/>settings and API key")]
-  end
-
-  groq["Groq API"]
-  google["Google Translate"]
-
-  user --> popup
-  user --> menu
-  user --> logo
-  menu --> worker
-  popup --> worker
-  translator -->|"messages"| router
-  logo -->|"messages"| router
-  router --> ai
-  router --> free
-  ai -->|"HTTPS, your key"| groq
-  ai -.->|"saturated or failing"| free
-  free --> google
-  worker --> storage
-  router --> log
-  popup -.->|"reads"| log
+  ui["Popup and<br/>right-click menu"] --> sw
+  page["Page scripts<br/>translator, logo, panel"] -->|"messages"| sw["Service worker<br/>router, AI, cache, log"]
+  sw -->|"your key"| groq["Groq"]
+  sw -.->|"fallback"| google["Google"]
+  sw --- store[("Storage<br/>settings, key")]
 ```
 
-The page scripts never see the API key: only the service worker and the extension's own pages (the popup) read it.
+Page scripts never see the API key: only the service worker and the popup read it.
 
-### What happens when a page is translated
+<details>
+<summary>What happens when a page is translated</summary>
 
 ```mermaid
-flowchart TD
-  start(["Translate this page"]) --> collect["Collect the text pieces<br/>including shadow DOM and changes made later"]
-  collect --> split{"On screen?"}
-  split -->|"yes"| high["High priority<br/>sent right away"]
-  split -->|"no"| low["Low priority<br/>background, closest first"]
-  high --> skip["Skip blocks already<br/>in the target language"]
-  low --> skip
-  skip --> key{"Groq key?"}
-  key -->|"no"| google["Google, block by block"]
-  key -->|"yes"| budget{"Room in the<br/>token budget?"}
-  budget -->|"waits too long"| google
-  budget -->|"yes"| batch["Batches of 1800 characters,<br/>4 at a time"]
-  batch --> check{"Pieces intact?"}
-  check -->|"no"| piece["Translate again,<br/>piece by piece"]
-  check -->|"yes"| write["Write the text into the page"]
-  piece --> write
-  batch -->|"request failed"| google
-  google --> write
-  write --> retry["Missing or failed pieces<br/>retried up to 6 times"]
-  retry --> sweep["Safety sweep every 4 s<br/>catches text nothing else saw"]
+%%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 22, "padding": 3}}}%%
+flowchart LR
+  a["Visible text<br/>first"] --> b["Skip what is<br/>already translated"] --> c{"Groq key and<br/>token budget?"}
+  c -->|"yes"| d["AI, batches<br/>of 1800 chars"]
+  c -->|"no"| e["Google"]
+  d -->|"failed"| e
+  d --> f["Write into<br/>the page"]
+  e --> f
+  f --> g["Retry what is<br/>missing"]
 ```
+
+The rest of the page follows in the background, closest text first, and a safety sweep every 4 s catches anything nothing else saw.
+
+</details>
 
 ## Install
 
