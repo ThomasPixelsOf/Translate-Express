@@ -40,6 +40,7 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
   const listeners = [];
   w.chrome = {
     runtime: {
+      id: "test-extension-id", // a live extension context always has one (its absence means the script is orphaned)
       lastError: undefined,
       inIncognitoContext: false,
       getURL: (p) => p,
@@ -296,5 +297,19 @@ test("priority: when scrolling to a waiting text, it immediately gets high prior
     assert.match(page.text("later"), /^\[fr\]/, "translated quickly once visible");
     const i = page.requests.findIndex((d) => d.some((s) => /scrolled into view/.test(s)));
     assert.equal(page.priorities[i], "high", "a text that becomes visible is handled with high priority");
+  } finally { page.w.close(); }
+});
+
+test("an orphaned script (extension reloaded while the page stays open) stops its timers instead of failing", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = createPage();
+  try {
+    await wait(150);
+    page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await wait(500);
+    const before = page.requests.length;
+    delete page.w.chrome.runtime.id; // the extension was reloaded: this script lost its context
+    page.w.document.body.insertAdjacentHTML("beforeend", '<p id="late" data-top="100" data-bottom="140">Text added after the extension was reloaded.</p>');
+    await wait(4500);
+    assert.equal(page.requests.length, before, "an orphaned script sends nothing more");
   } finally { page.w.close(); }
 });

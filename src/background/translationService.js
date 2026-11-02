@@ -446,7 +446,7 @@ const translationService = (function () {
               }
             })
             .catch((e) => {
-              console.error(e);
+              if (!(e && e.expected)) console.error(e);
               for (const transInfo of request) {
                 transInfo.status = "error";
                 //this.translationsInProgress.delete([sourceLanguage, targetLanguage, transInfo.originalText])
@@ -913,7 +913,7 @@ const translationService = (function () {
         // Fallback: if the AI fails (key refused, rate limit, outage), the page is translated by Google rather than left empty.
         .catch((e) => {
           if (request.translationService !== "llm") throw e;
-          console.warn("AI translation failed, falling back to the free translator:", e);
+          if (!(e && e.expected)) console.warn("AI translation failed, falling back to the free translator:", e);
           return translationService.translateHTML(
             "google",
             request.sourceLanguage,

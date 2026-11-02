@@ -72,7 +72,25 @@ function pageMenuTitle(state = "original") {
     : "Translate this page to " + twpLang.codeToLanguage(targetLanguage());
 }
 
+// Only one build at a time: a second request made while one is running is replayed afterwards, otherwise both builds
+// would create every entry ("Cannot create item with duplicate id").
+let menusBuilding = false;
+let menusDirty = false;
+
 function createMenus() {
+  if (menusBuilding) {
+    menusDirty = true;
+    return;
+  }
+  menusBuilding = true;
+  const finished = () => {
+    checkedLastError();
+    menusBuilding = false;
+    if (menusDirty) {
+      menusDirty = false;
+      createMenus();
+    }
+  };
   chrome.contextMenus.removeAll(() => {
     checkedLastError();
     chrome.contextMenus.create({ id: MENU.selection, title: "Translate selection", contexts: ["selection"] });
@@ -99,7 +117,7 @@ function createMenus() {
     // Two languages: the one you READ in (pages, displayed text) and the one you WRITE in (typed text, translated
     // for the recipient). They are independent: read in French, write in English.
     const known = new Set(twpLang.TargetLanguages);
-    const addLanguageMenu = (id, prefix, title, current, moreId) => {
+    const addLanguageMenu = (id, prefix, title, current, moreId, done) => {
       const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
       chrome.contextMenus.create({ id, title: title + twpLang.codeToLanguage(current), contexts: ["all"] });
       for (const code of choices) {
@@ -112,10 +130,10 @@ function createMenus() {
           contexts: ["all"],
         });
       }
-      chrome.contextMenus.create({ id: moreId, parentId: id, title: "More languages...", contexts: ["all"] });
+      chrome.contextMenus.create({ id: moreId, parentId: id, title: "More languages...", contexts: ["all"] }, done);
     };
     addLanguageMenu(MENU.lang, "twp-lang-", "Read in: ", targetLanguage(), MENU.languagesRead);
-    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage(), MENU.languagesWrite);
+    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage(), MENU.languagesWrite, finished); // the last entry created ends the build
     refreshMenuForActiveTab();
   });
 }

@@ -133,6 +133,7 @@ var twpLlm = (function () {
         // and the calling service falls back to the free translator.
         if (budget.blockedUntil - at > MAX_WAIT_MS) {
           const err = new Error("rate limited (retry in " + Math.round((budget.blockedUntil - at) / 1000) + " s)");
+          err.expected = true; // normal flow: the caller falls back to Google, nothing to report
           err.definitive = true;
           throw err;
         }
@@ -154,6 +155,7 @@ var twpLlm = (function () {
       if (waitMs > (high ? BUDGET_MAX_WAIT.high : BUDGET_MAX_WAIT.low)) {
         dlog("llm.budget-skip", { waitMs: waitMs, priority: high ? "high" : "low", estTokens: tokens });
         const err = new Error("token budget saturated (would wait " + Math.round(waitMs / 1000) + " s)");
+        err.expected = true; // normal flow: the caller falls back to Google, nothing to report
         err.definitive = true;
         throw err;
       }
@@ -305,6 +307,7 @@ var twpLlm = (function () {
             // Long rate limit: waiting would block the page for tens of seconds. Give up right away,
             // the calling service falls back to the free translator.
             const err = new Error("rate limited (retry in " + Math.round(delay / 1000) + " s)");
+            err.expected = true;
             err.definitive = true;
             throw err;
           }

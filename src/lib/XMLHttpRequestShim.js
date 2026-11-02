@@ -135,7 +135,11 @@ const XMLHttpRequestShim = class XMLHttpRequest extends EventTarget {
           this.response = await resp.arrayBuffer();
           break;
         case "json":
-          this.response = await resp.json();
+          try {
+            this.response = await resp.json();
+          } catch (e) {
+            this.response = null; // like a real XMLHttpRequest: a body that is not JSON gives a null response
+          }
           break;
       }
       this[sDispatch](new CustomEvent("load"));

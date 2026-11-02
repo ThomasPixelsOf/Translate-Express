@@ -48,7 +48,7 @@ function fakeChrome() {
     i18n: { getUILanguage: () => "fr", getMessage: (n) => n, getAcceptLanguages: (cb) => cb(["fr", "fr-FR", "en"]) },
     contextMenus: {
       removeAll: (cb) => { menus.length = 0; cb && cb(); },
-      create: (m) => menus.push(m),
+      create: (m, cb) => { menus.push(m); cb && cb(); },
       update: (id, p, cb) => { const m = menus.find((x) => x.id === id); if (m) Object.assign(m, p); cb && cb(); },
       onClicked: { addListener: (f) => handlers.onClicked.push(f) },
     },

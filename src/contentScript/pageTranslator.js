@@ -408,7 +408,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   let nodesToRestore = [];
 
-  // ================= Diagnostic : journal, rapport de page, garde-fou =================
+  // ================= Diagnostics: log, page report, guard =================
   // The log goes to the service worker in small packets (see background/diagnostics.js); the dashboard displays it.
   const diagEvents = [];
   let diagTimer = null;
@@ -718,13 +718,24 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
+  // After the extension is reloaded or updated, the script of a page that stays open is orphaned (its chrome.runtime is
+  // gone): its timers stop instead of failing at every tick.
+  const orphaned = () => !(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
+  function everyUnlessOrphaned(fn, ms) {
+    const handle = setInterval(() => {
+      if (orphaned()) clearInterval(handle);
+      else fn();
+    }, ms);
+    return handle;
+  }
+
   function enableMutatinObserver() {
     disableMutatinObserver();
-    watchdogTimerHandler = setInterval(watchdog, Number(twpConfig.get("diagWatchdogMs")) || 5000);
+    watchdogTimerHandler = everyUnlessOrphaned(watchdog, Number(twpConfig.get("diagWatchdogMs")) || 5000);
 
     if (twpConfig.get("translateDynamicallyCreatedContent") == "yes") {
-      translateNewNodesTimerHandler = setInterval(translateNewNodes, 2000);
-      sweepTimerHandler = setInterval(sweepForMissedText, 4000);
+      translateNewNodesTimerHandler = everyUnlessOrphaned(translateNewNodes, 2000);
+      sweepTimerHandler = everyUnlessOrphaned(sweepForMissedText, 4000);
       mutationObserverActive = true;
       mutationObserver.observe(document.body, MUTATION_OPTIONS);
     }
@@ -1298,6 +1309,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   const LOW_BATCH_CHARS = 1500; // size of a background batch (one batch at a time)
 
   function sendPieces(piecesNow, priority, currentFooCount) {
+    if (orphaned()) return; // the extension was reloaded: this script can no longer reach it
     const tEnvoi = Date.now();
     lastSentAt = tEnvoi;
     if (priority === "high") {
@@ -1340,6 +1352,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
           translateResults(piecesNow, results);
         }
       })
+      .catch((e) => diagLog("page.send-failed", { error: String((e && e.message) || e).slice(0, 120) }))
       .finally(() => {
         if (priority === "high") highInFlight--;
         else lowInFlight = false;
