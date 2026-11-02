@@ -87,3 +87,8 @@ select { max-width: 190px; }
 
 #settings { color: var(--accent); font-size: 12px; text-decoration: none; }
 body.docked header { padding-right: 44px; }
+
+select { color-scheme: light dark; }
+option, optgroup { background: var(--bg); color: var(--fg); }
+optgroup { font-weight: 700; }
+option { font-weight: 400; }

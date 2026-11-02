@@ -154,3 +154,30 @@ test("la bulle de sélection est active par défaut et se désactive depuis le m
   handlers.onClicked.forEach((f) => f({ menuItemId: "twp-bubble", checked: false, frameId: 0 }, { id: 1 }));
   assert.equal(vm.runInContext('twpConfig.get("showTranslateSelectedButton")', sandbox), "no");
 });
+
+test("la liste des langues : courantes d'abord, puis toutes de A à Z, sans doublon", async () => {
+  const { sandbox } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  // Faux élément <select> minimal : suffisant pour construire la liste.
+  const sortie = vm.runInContext(`(function () {
+    const creer = (tag) => ({ tag, children: [], textContent: "", appendChild(c) { this.children.push(c); } });
+    const doc = { createElement: creer };
+    const select = Object.assign(creer("select"), { ownerDocument: doc });
+    twpLang.fillLanguageSelect(select, { auto: true });
+    const groupes = select.children.filter((c) => c.tag === "optgroup");
+    return JSON.stringify({
+      premier: select.children[0].value,
+      frequentes: groupes[0].children.map((o) => o.value),
+      toutes: groupes[1].children.map((o) => o.textContent),
+    });
+  })()`, sandbox);
+  const r = JSON.parse(sortie);
+  assert.equal(r.premier, "auto");
+  assert.deepEqual(r.frequentes.slice(0, 4), ["en", "fr", "de", "es"]);
+  const triees = [...r.toutes].sort((a, b) => a.localeCompare(b, "fr"));
+  assert.deepEqual(r.toutes, triees, "toutes les langues sont triées de A à Z");
+  assert.equal(new Set(r.toutes).size, r.toutes.length, "pas de doublon");
+  assert.ok(r.toutes.length > 50);
+  assert.ok(!r.toutes.some((n) => /emoji/i.test(n)), "« Emoji » n'est pas une langue");
+});

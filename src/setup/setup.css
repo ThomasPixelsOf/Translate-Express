@@ -15,3 +15,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .buttons { display: flex; gap: 8px; margin-top: 16px; }
 #status { min-height: 1.5em; margin-top: 12px; color: var(--fg); }
 #status.error { color: #d93025; }
+
+select { color-scheme: light dark; }
+option, optgroup { background: var(--bg); color: var(--fg); }
+optgroup { font-weight: 700; }
+option { font-weight: 400; }

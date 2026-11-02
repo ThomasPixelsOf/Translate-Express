@@ -89,16 +89,20 @@
   // ---- interface (shadow DOM : isolée des styles de la page) ----
   const CSS = `
     :host { all: initial; }
-    * { box-sizing: border-box; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .panel { position: fixed; z-index: 2147483647; width: 360px; max-width: calc(100vw - 16px); background: #fff; color: #1d1d1f;
+    * { box-sizing: border-box; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .panel { position: fixed; z-index: 2147483647; width: 380px; max-width: calc(100vw - 16px); background: #fff; color: #1d1d1f;
       border: 1px solid #c8c8d0; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28); padding: 10px; display: none; }
     @media (prefers-color-scheme: dark) { .panel { background: #1c1c1e; color: #f2f2f4; border-color: #3a3a3e; } }
     .row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
     select, button { font: inherit; border: 1px solid #c8c8d0; border-radius: 6px; padding: 4px 8px; background: transparent; color: inherit; cursor: pointer; }
-    select { flex: 1; min-width: 0; }
+    select { flex: 1; min-width: 0; color-scheme: light dark; }
+    option, optgroup { background: #fff; color: #1d1d1f; }
+    @media (prefers-color-scheme: dark) { option, optgroup { background: #26262a; color: #f2f2f4; } }
+    optgroup { font-weight: 700; }
+    option { font-weight: 400; }
     button.primary { background: #0f62fe; border-color: #0f62fe; color: #fff; }
     button[hidden] { display: none; }
-    .out { white-space: pre-wrap; max-height: 220px; overflow: auto; border: 1px solid #c8c8d0; border-radius: 6px; padding: 8px; min-height: 52px; margin-bottom: 8px; }
+    .out { font-size: 15px; white-space: pre-wrap; max-height: 220px; overflow: auto; border: 1px solid #c8c8d0; border-radius: 6px; padding: 8px; min-height: 52px; margin-bottom: 8px; }
     .status { font-size: 11px; opacity: .7; }
     .err { color: #d93025; opacity: 1; }
     .close { margin-left: auto; border: 0; padding: 0 6px; font-size: 16px; }
@@ -129,14 +133,7 @@
       win: root.querySelector(".win"),
       close: root.querySelector(".close"),
     };
-    const names = twpLang.getLanguageList();
-    for (const code of twpLang.TargetLanguages) {
-      if (!names[code]) continue;
-      const o = document.createElement("option");
-      o.value = code;
-      o.textContent = names[code];
-      ui.lang.appendChild(o);
-    }
+    twpLang.fillLanguageSelect(ui.lang);
     // La langue cible est la même partout (menu, page, fenêtre de message) : celle de twpConfig.
     const ui2 = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
     ui.lang.value = twpConfig.get("targetLanguage") || ui2;
@@ -201,7 +198,7 @@
   function place() {
     if (!open) return;
     const r = anchorRect();
-    const pw = Math.min(360, window.innerWidth - 8);
+    const pw = Math.min(380, window.innerWidth - 8);
     ui.panel.style.left = Math.max(4, Math.min(window.innerWidth - pw - 4, r.left)) + "px";
     const below = r.bottom + 8;
     if (window.innerHeight - below > 260) {

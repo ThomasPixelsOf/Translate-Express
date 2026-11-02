@@ -11975,6 +11975,41 @@ const twpLang = (function () {
     return allLanguagesNames[uiLanguage];
   };
 
+  // Langues courantes, affichées en premier dans toutes les listes.
+  // « Emoji » (emj) est proposé par Google Translate mais n'est pas une langue : écarté des listes.
+  const NOT_REAL_LANGUAGES = ["emj"];
+  const FREQUENT_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", "zh-CN", "ko", "ar", "tr", "pl"];
+
+  /**
+   * Remplit une liste déroulante : « Detect language » (facultatif), puis les langues courantes, puis toutes les
+   * langues triées de A à Z selon la langue de l'interface. Les options ont des couleurs explicites : lisibles
+   * sur fond clair comme sur fond sombre.
+   * @param {HTMLSelectElement} select
+   * @param {{auto?: boolean}} options
+   */
+  twpLang.fillLanguageSelect = function (select, options = {}) {
+    const names = twpLang.getLanguageList();
+    const known = twpLang.TargetLanguages.filter((code) => names[code] && !NOT_REAL_LANGUAGES.includes(code));
+    const collator = new Intl.Collator(chrome.i18n.getUILanguage());
+    const doc = select.ownerDocument;
+    const add = (parent, value, label) => {
+      const o = doc.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      parent.appendChild(o);
+    };
+    select.textContent = "";
+    if (options.auto) add(select, "auto", "Detect language");
+    const frequent = doc.createElement("optgroup");
+    frequent.label = "Frequent languages";
+    for (const code of FREQUENT_LANGUAGES) if (known.includes(code)) add(frequent, code, names[code]);
+    select.appendChild(frequent);
+    const all = doc.createElement("optgroup");
+    all.label = "All languages (A-Z)";
+    for (const code of [...known].sort((a, b) => collator.compare(names[a], names[b]))) add(all, code, names[code]);
+    select.appendChild(all);
+  };
+
   /** @type {Map<string, string>} */
   const alternatives = new Map();
   const pageTranslationServices = ["google", "llm"];

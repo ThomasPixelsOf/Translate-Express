@@ -69,13 +69,7 @@
   function initLanguage() {
     const select = $("#language");
     const names = twpLang.getLanguageList();
-    for (const code of twpLang.TargetLanguages) {
-      if (!names[code]) continue;
-      const o = document.createElement("option");
-      o.value = code;
-      o.textContent = names[code];
-      select.appendChild(o);
-    }
+    twpLang.fillLanguageSelect(select);
     select.value = twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
     select.onchange = () => {
       twpConfig.set("targetLanguage", select.value);

@@ -17,23 +17,7 @@
   let ticket = 0; // chaque requête a un numéro : une réponse en retard est ignorée
   let aiAvailable = false;
 
-  function fillLanguages(select, withAuto) {
-    const names = twpLang.getLanguageList();
-    select.textContent = "";
-    if (withAuto) {
-      const o = document.createElement("option");
-      o.value = "auto";
-      o.textContent = "Detect language";
-      select.appendChild(o);
-    }
-    for (const code of twpLang.TargetLanguages) {
-      if (!names[code]) continue;
-      const o = document.createElement("option");
-      o.value = code;
-      o.textContent = names[code];
-      select.appendChild(o);
-    }
-  }
+  const fillLanguages = (select, withAuto) => twpLang.fillLanguageSelect(select, { auto: withAuto });
 
   function remembered(key, fallback) {
     try {
