@@ -16,7 +16,7 @@ const twpConfig = (function () {
     enabledServices: ["google"],
     ttsSpeed: 1.0,
     ttsVolume: 1.0,
-    targetLanguage: null,
+    targetLanguage: "fr", // langue par défaut ; remplacée seulement par un choix de l'utilisateur
     targetLanguageChosen: "no", // "yes" dès que l'utilisateur choisit lui-même la langue : on ne la détecte plus
     targetLanguageTextTranslation: null,
     targetLanguages: [], // "en", "es", "de"

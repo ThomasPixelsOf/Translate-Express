@@ -30,23 +30,15 @@ function getTabPageState(tabId, callback) {
   });
 }
 
-// Langue par défaut, tant que l'utilisateur n'a pas choisi : sa langue à lui, pas forcément celle de l'interface.
-// Beaucoup de navigateurs ont l'anglais en tête (interface et langues préférées « en,fr ») alors que la personne lit
-// l'anglais comme langue étrangère : on prend la première langue de l'interface ou des langues préférées qui n'est PAS
-// l'anglais ; s'il n'y en a pas, l'anglais.
-function pickDefaultLanguage(uiLanguage, acceptedLanguages, fix) {
-  const codes = [uiLanguage, ...(acceptedLanguages || [])].map((raw) => fix(raw)).filter(Boolean);
-  return codes.find((code) => code !== "en") || codes[0];
-}
+// Langue par défaut, tant que l'utilisateur n'a pas choisi la sienne : le français.
+// (Détecter la langue du navigateur ne marche pas : un Brave en anglais avec les langues « en,fr » donnait l'anglais.)
+const DEFAULT_TARGET_LANGUAGE = "fr";
 
 function detectBrowserLanguage(done) {
-  if (twpConfig.get("targetLanguageChosen") === "yes") return done();
-  chrome.i18n.getAcceptLanguages((accepted) => {
-    checkedLastError();
-    const code = pickDefaultLanguage(chrome.i18n.getUILanguage(), accepted, twpLang.fixTLanguageCode);
-    if (code && twpConfig.get("targetLanguage") !== code) twpConfig.set("targetLanguage", code);
-    done();
-  });
+  if (twpConfig.get("targetLanguageChosen") !== "yes" && twpConfig.get("targetLanguage") !== DEFAULT_TARGET_LANGUAGE) {
+    twpConfig.set("targetLanguage", DEFAULT_TARGET_LANGUAGE);
+  }
+  done();
 }
 
 function targetLanguage() {
