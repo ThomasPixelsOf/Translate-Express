@@ -177,6 +177,6 @@ node --test "tests/*.test.js"
 
 ## Good to know
 
-- The tests (103) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- The tests (109) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 36 of them (page, panel, popup and settings) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: automatically sending back to Groq the texts that came back unchanged.
