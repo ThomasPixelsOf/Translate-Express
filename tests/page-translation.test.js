@@ -61,7 +61,6 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
         }
         if (m.action === "detectTabLanguage" || m.action === "getMainFrameTabLanguage") return reply("en");
         if (m.action === "getMainFramePageLanguageState") return reply("original");
-        if (m.action === "getTabHostName") return reply("exemple.test");
         return reply(undefined);
       },
     },

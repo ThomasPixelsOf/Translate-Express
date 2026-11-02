@@ -73,17 +73,7 @@ function backgroundTranslateSingleText(
 
 var pageTranslator = {};
 
-function getTabHostName() {
-  return new Promise((resolve) =>
-    chrome.runtime.sendMessage({ action: "getTabHostName" }, (result) => {
-      checkedLastError();
-      resolve(result);
-    })
-  );
-}
-
-Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
-  const tabHostName = _[1];
+twpConfig.onReady(function () {
   // "sup" will not be translated https://github.com/FilipePS/Traduzir-paginas-web/issues/647
   /* prettier-ignore */
   const htmlTagsInlineText = ["#text", "a", "abbr", "acronym", "b", "bdo", "big", "cite", "dfn", "em", "i", "label", "q", "s", "small", "span", "strong", "sub", /*"sup",*/ "u", "tt", "var"];
@@ -140,8 +130,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   // Pieces are a set of nodes separated by inline tags that form a sentence or paragraph.
   let piecesToTranslate = [];
-  let originalTabLanguage = "und";
-  let currentPageLanguage = "und";
   let pageLanguageState = "original";
   let currentSourceLanguage = "auto";
   let currentTargetLanguage = twpConfig.get("targetLanguage");
@@ -1194,12 +1182,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     });
   }
 
-  const pageLanguageStateObservers = [];
-
-  pageTranslator.onPageLanguageStateChange = function (callback) {
-    pageLanguageStateObservers.push(callback);
-  };
-
   var translationRoutine_handler = null;
 
   pageTranslator.translatePage = function (targetLanguage) {
@@ -1250,10 +1232,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       },
       checkedLastError
     );
-    pageLanguageStateObservers.forEach((callback) =>
-      callback(pageLanguageState)
-    );
-    currentPageLanguage = currentTargetLanguage;
 
     translatePageTitle();
 
@@ -1276,10 +1254,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       },
       checkedLastError
     );
-    pageLanguageStateObservers.forEach((callback) =>
-      callback(pageLanguageState)
-    );
-    currentPageLanguage = originalTabLanguage;
 
     if (originalPageTitle) {
       document.title = originalPageTitle;
@@ -1309,34 +1283,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     attributesToTranslate = [];
   };
 
-  pageTranslator.swapTranslationService = function (newServiceName) {
-    currentPageTranslatorService = newServiceName;
-    if (pageLanguageState === "translated") {
-      pageTranslator.translatePage();
-    }
-  };
-
-  pageTranslator.improveTranslation = function (info) {
-    currentPageTranslatorService = info.pageTranslatorService;
-    currentSourceLanguage = info.sourceLanguage;
-    if (pageLanguageState === "translated") {
-      pageTranslator.translatePage(info.targetLanguage);
-    }
-  };
-
-  let alreadyGotTheLanguage = false;
-  const observers = [];
-
-  pageTranslator.onGetOriginalTabLanguage = function (callback) {
-    if (alreadyGotTheLanguage) {
-      callback(originalTabLanguage);
-    } else {
-      observers.push(callback);
-    }
-  };
-
-  let textContentLanguageDetectionPromise = null;
-
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "translatePage") {
       // The menu specifies the service to use (AI if a key is saved, otherwise Google).
@@ -1348,204 +1294,13 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       }
     } else if (request.action === "restorePage") {
       pageTranslator.restorePage();
-    } else if (request.action === "getOriginalTabLanguage") {
-      pageTranslator.onGetOriginalTabLanguage(function () {
-        sendResponse(originalTabLanguage);
-      });
-      return true;
-    } else if (request.action === "getCurrentPageLanguage") {
-      sendResponse(currentPageLanguage);
     } else if (request.action === "getCurrentPageLanguageState") {
       sendResponse(pageLanguageState);
-    } else if (request.action === "getCurrentPageTranslatorService") {
-      sendResponse(currentPageTranslatorService);
-    } else if (request.action === "swapTranslationService") {
-      pageTranslator.swapTranslationService(request.newServiceName);
-    } else if (request.action === "toggle-translation") {
-      if (pageLanguageState === "translated") {
-        pageTranslator.restorePage();
-      } else {
-        pageTranslator.translatePage();
-      }
-    } else if (request.action === "autoTranslateBecauseClickedALink") {
-      if (twpConfig.get("autoTranslateWhenClickingALink") === "yes") {
-        pageTranslator.onGetOriginalTabLanguage(function () {
-          if (
-            pageLanguageState === "original" &&
-            originalTabLanguage !== currentTargetLanguage &&
-            twpConfig
-              .get("neverTranslateLangs")
-              .indexOf(originalTabLanguage) === -1 &&
-            twpConfig.get("neverTranslateSites").indexOf(tabHostName) === -1
-          ) {
-            pageTranslator.translatePage();
-          }
-        });
-      }
-    } else if (request.action === "restorePagesWithServiceNames") {
-      if (request.serviceNames.includes(currentPageTranslatorService)) {
-        pageTranslator.restorePage();
-        currentPageTranslatorService = request.newServiceName;
-      }
-    } else if (request.action === "improveTranslation") {
-      pageTranslator.improveTranslation(request);
-    } else if (request.action === "getCurrentSourceLanguage") {
-      sendResponse(currentSourceLanguage);
-    } else if (request.action === "cleanUp") {
-      pageTranslator.restorePage();
-    } else if (request.action === "currentTargetLanguage") {
-      sendResponse(currentTargetLanguage);
-    } else if (request.action === "detectLanguageUsingTextContent") {
-      if (textContentLanguageDetectionPromise) {
-        textContentLanguageDetectionPromise.then((result) =>
-          sendResponse(result)
-        );
-      } else {
-        textContentLanguageDetectionPromise = new Promise((resolve) => {
-          chrome.i18n.detectLanguage(
-            document.body.innerText.trim().slice(0, 1000),
-            (result) => {
-              // checkedLastError();
-              if (
-                result &&
-                result.languages &&
-                result.languages.length > 0
-              ) {
-                resolve(result.languages[0].language);
-                sendResponse(result.languages[0].language);
-              } else {
-                sendResponse("und");
-              }
-            }
-          );
-        });
-      }
-      return true;
     }
   });
 
-  // Requests the detection of the tab language in the background
-  if (window.self === window.top) {
-    // is main frame
-    const onTabVisible = function () {
-      chrome.runtime.sendMessage(
-        {
-          action: "detectTabLanguage",
-        },
-        (result) => {
-          checkedLastError();
-
-          result = result || "und";
-          if (result === "und") {
-            originalTabLanguage = result;
-            if (
-              (twpConfig.get("alwaysTranslateSites").indexOf(tabHostName) !==
-                -1 ||
-                (location.hostname === "pdf.translatewebpages.org" &&
-                  twpConfig.get("neverTranslateSites").indexOf(tabHostName) ===
-                    -1)) &&
-              !platformInfo.isMobile.any
-            ) {
-              pageTranslator.translatePage();
-            }
-          } else {
-            const langCode = twpLang.fixTLanguageCode(result);
-            if (langCode) {
-              originalTabLanguage = langCode;
-            }
-            if (
-              (location.hostname === "pdftohtml.translatewebpages.org" &&
-                location.href.indexOf("?autotranslate") !== -1 &&
-                twpConfig.get("neverTranslateSites").indexOf(tabHostName) ===
-                  -1) ||
-              (location.hostname === "pdf.translatewebpages.org" &&
-                twpConfig.get("neverTranslateSites").indexOf(tabHostName) ===
-                  -1)
-            ) {
-              pageTranslator.translatePage();
-            } else {
-              if (
-                location.hostname !== "translate.googleusercontent.com" &&
-                location.hostname !== "translate.google.com" &&
-                location.hostname !== "translate.yandex.com" &&
-                location.hostname !== "www.deepl.com" &&
-                location.hostname !== "translated.turbopages.org" &&
-                !location.hostname.endsWith("translate.goog") &&
-                location.hostname !== "sberbank.com" &&
-                location.hostname !== "www.sberbank.com" // https://github.com/FilipePS/Traduzir-paginas-web/issues/619
-              ) {
-                if (
-                  pageLanguageState === "original" &&
-                  // !platformInfo.isMobile.any &&
-                  !chrome.extension.inIncognitoContext
-                ) {
-                  if (
-                    twpConfig
-                      .get("neverTranslateSites")
-                      .indexOf(tabHostName) === -1
-                  ) {
-                    if (
-                      langCode &&
-                      langCode !== currentTargetLanguage &&
-                      twpConfig
-                        .get("alwaysTranslateLangs")
-                        .indexOf(langCode) !== -1
-                    ) {
-                      pageTranslator.translatePage();
-                    } else if (
-                      twpConfig
-                        .get("alwaysTranslateSites")
-                        .indexOf(tabHostName) !== -1 &&
-                      !platformInfo.isMobile.any
-                    ) {
-                      pageTranslator.translatePage();
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          observers.forEach((callback) => callback(originalTabLanguage));
-          alreadyGotTheLanguage = true;
-        }
-      );
-    };
-    setTimeout(function () {
-      if (document.visibilityState == "visible") {
-        onTabVisible();
-      } else {
-        const handleVisibilityChange = function () {
-          if (document.visibilityState == "visible") {
-            document.removeEventListener(
-              "visibilitychange",
-              handleVisibilityChange
-            );
-            onTabVisible();
-          }
-        };
-        document.addEventListener(
-          "visibilitychange",
-          handleVisibilityChange,
-          false
-        );
-      }
-    }, 150);
-  } else {
-    // is subframe (iframe)
-    chrome.runtime.sendMessage(
-      {
-        action: "getMainFrameTabLanguage",
-      },
-      (result) => {
-        checkedLastError();
-
-        originalTabLanguage = result || "und";
-        observers.forEach((callback) => callback(originalTabLanguage));
-        alreadyGotTheLanguage = true;
-      }
-    );
-
+  // A frame (iframe) that loads while the main page is translated translates itself too.
+  if (window.self !== window.top) {
     chrome.runtime.sendMessage(
       {
         action: "getMainFramePageLanguageState",

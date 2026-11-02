@@ -211,28 +211,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse(state);
     });
     return true;
-  } else if (request.action === "getMainFrameTabLanguage") {
-    chrome.tabs.sendMessage(sender.tab.id, { action: "getOriginalTabLanguage" }, { frameId: 0 }, (language) => {
-      checkedLastError();
-      sendResponse(language);
-    });
-    return true;
   } else if (request.action === "setPageLanguageState") {
     if (sender.tab && sender.tab.active && (sender.frameId === 0 || sender.frameId === undefined)) {
       updatePageMenuTitle(request.pageLanguageState === "translated" ? "translated" : "original");
     }
-  } else if (request.action === "detectTabLanguage") {
-    if (!sender.tab) {
-      sendResponse("und");
-      return;
-    }
-    chrome.tabs.detectLanguage(sender.tab.id, (language) => {
-      checkedLastError();
-      sendResponse(language);
-    });
-    return true;
-  } else if (request.action === "getTabHostName") {
-    sendResponse(new URL(sender.tab.url).hostname);
   } else if (request.action === "thisFrameIsInFocus") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "anotherFrameIsInFocus" }, checkedLastError);
   } else if (request.action === "twpFramePanel") {
