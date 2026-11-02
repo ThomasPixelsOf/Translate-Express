@@ -3,14 +3,13 @@
 const twpConfig = (function () {
   /** @type {function[]} */
   const observers = [];
-  const defaultTargetLanguages = ["en", "es", "de"];
   // Settings holding secrets (the API key lives in customServices). Scripts injected in web pages never load them
   // nor write them: only the service worker and the extension's own pages need the key.
   const SECRET_KEYS = ["customServices"];
   const inWebPage = typeof location !== "undefined" && /^(https?|file|ftp):$/.test(location.protocol);
   /**
    * all configName available
-   * @typedef {"uiLanguage" | "pageTranslatorService" | "enabledServices" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageFixed" | "writeLanguage" | "diagnostics" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "alwaysTranslateLangs" | "neverTranslateLangs" | "showTranslateSelectedButton" | "translateTag_pre" | "enableIframePageTranslation" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "enableDiskCache" | "useAlternativeService" | "customServices" | "proxyServers"} DefaultConfigNames
+   * @typedef {"uiLanguage" | "pageTranslatorService" | "enabledServices" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageFixed" | "writeLanguage" | "diagnostics" | "showTranslateSelectedButton" | "useAlternativeService" | "customServices"} DefaultConfigNames
    */
   const defaultConfig = {
     uiLanguage: "default",
@@ -23,20 +22,9 @@ const twpConfig = (function () {
     diagnostics: "yes", // journal de diagnostic (tableau de bord) ; "no" le coupe
     targetLanguageFixed: "no", // "yes" once the language was reset after an old default (one-time repair)
     targetLanguageChosen: "no", // "yes" as soon as the user chooses the language themselves: it is no longer detected
-    targetLanguages: [], // "en", "es", "de"
-    alwaysTranslateSites: [],
-    neverTranslateSites: [],
-    alwaysTranslateLangs: [],
-    neverTranslateLangs: [],
     showTranslateSelectedButton: "yes",
-    translateTag_pre: "yes",
-    enableIframePageTranslation: "yes",
-    translateDynamicallyCreatedContent: "yes",
-    autoTranslateWhenClickingALink: "no",
-    enableDiskCache: "no",
     useAlternativeService: "yes",
     customServices: [],
-    proxyServers: {},
   };
   const config = structuredClone(defaultConfig);
 
@@ -78,8 +66,8 @@ const twpConfig = (function () {
   /**
    * get the value of a config
    * @example
-   * twpConfig.get("targetLanguages")
-   * // returns ["en", "es", "de"]
+   * twpConfig.get("targetLanguage")
+   * // returns "fr"
    * @param {DefaultConfigNames} name
    * @returns {*} value
    */
@@ -129,146 +117,23 @@ const twpConfig = (function () {
   });
 
   // load config
-  chrome.i18n.getAcceptLanguages((acceptedLanguages) => {
-    // In a web page, ask only for the non-secret settings: the key is never even read there.
-    const wanted = inWebPage ? Object.keys(defaultConfig).filter((k) => !SECRET_KEYS.includes(k)) : null;
-    chrome.storage.local.get(wanted, (onGot) => {
-      // load config; convert object/array to map/set if necessary
-      for (const name in onGot) {
-        config[name] = fixObjectType(name, onGot[name]);
-      }
+  // In a web page, ask only for the non-secret settings: the key is never even read there.
+  const wanted = inWebPage ? Object.keys(defaultConfig).filter((k) => !SECRET_KEYS.includes(k)) : null;
+  chrome.storage.local.get(wanted, (onGot) => {
+    for (const name in onGot) {
+      config[name] = fixObjectType(name, onGot[name]);
+    }
 
-      // if there are any targetLanguage undefined, replace them
-      if (config.targetLanguages.some((tl) => !tl)) {
-        config.targetLanguages = [...defaultTargetLanguages];
-        chrome.storage.local.set({
-          targetLanguages: config.targetLanguages,
-        });
-      }
-
-      // Probably at this point it doesn't have 3 target languages.
-
-      // try to get the 3 target languages through the user defined languages in the browser configuration.
-      for (let lang of acceptedLanguages) {
-        if (config.targetLanguages.length >= 3) break;
-        lang = twpLang.fixTLanguageCode(lang);
-        if (lang && config.targetLanguages.indexOf(lang) === -1) {
-          config.targetLanguages.push(lang);
-        }
-      }
-
-      // then try to use de array defaultTargetLanguages ["en", "es", "de"]
-      for (const lang in defaultTargetLanguages) {
-        if (config.targetLanguages.length >= 3) break;
-        if (
-          config.targetLanguages.indexOf(defaultTargetLanguages[lang]) === -1
-        ) {
-          config.targetLanguages.push(defaultTargetLanguages[lang]);
-        }
-      }
-
-      // if targetLanguages is bigger than 3 remove the surplus
-      while (config.targetLanguages.length > 3) config.targetLanguages.pop();
-
-      /*
-      // remove the duplicates languages
-      config.targetLanguages = [... new Set(config.targetLanguages)]
-      //*
-      // then try to use de array defaultTargetLanguages ["en", "es", "de"]
-      for (const lang of defaultTargetLanguages) {
-        if (config.targetLanguages.length >= 3) break;
-        if (config.targetLanguages.indexOf(lang) === -1) {
-          config.targetLanguages.push(lang);
-        }
-      }
-      //*/
-
-      // Target language: only replaced if it does not exist. (Before: it was also replaced as soon as it
-      // was not among the browser's first three languages, which cancelled any choice at every restart.)
-      if (!config.targetLanguage) {
-        config.targetLanguage = config.targetLanguages[0];
-      }
-
-      // fix targetLanguages
-      config.targetLanguages = config.targetLanguages.map((lang) =>
-        twpLang.fixTLanguageCode(lang)
-      );
-      // fix neverTranslateLangs
-      config.neverTranslateLangs = config.neverTranslateLangs.map((lang) =>
-        twpLang.fixTLanguageCode(lang)
-      );
-      // fix alwaysTranslateLangs
-      config.alwaysTranslateLangs = config.alwaysTranslateLangs.map((lang) =>
-        twpLang.fixTLanguageCode(lang)
-      );
-      // fix targetLanguage
-      config.targetLanguage = twpLang.fixTLanguageCode(config.targetLanguage);
-
-      // A valid language chosen by the user is kept, even outside the browser's three languages.
-      if (!config.targetLanguage) {
-        config.targetLanguage = config.targetLanguages[0];
-      }
-      readyConfig();
-    });
+    // Target language: a valid one chosen by the user is always kept; only a missing or invalid one is replaced by the default.
+    config.targetLanguage = twpLang.fixTLanguageCode(config.targetLanguage) || defaultConfig.targetLanguage;
+    readyConfig();
   });
-
-  /**
-   * Add a new lang to the targetLanguages and remove the last target language. If the language is already in the targetLanguages then move it to the first position
-   * @example
-   * addTargetLanguage("de")
-   * @param {string} lang - langCode
-   * @returns
-   */
-  function addTargetLanguage(lang) {
-    const targetLanguages = twpConfig.get("targetLanguages");
-    lang = twpLang.fixTLanguageCode(lang);
-    if (!lang) return;
-
-    const index = targetLanguages.indexOf(lang);
-    if (index === -1) {
-      targetLanguages.unshift(lang);
-      targetLanguages.pop();
-    } else {
-      targetLanguages.splice(index, 1);
-      targetLanguages.unshift(lang);
-    }
-
-    twpConfig.set("targetLanguages", targetLanguages);
-  }
-
-  /**
-   * set lang as target language for page translation only (not text translation)
-   *
-   * if the lang in not in targetLanguages then call addTargetLanguage
-   * @example
-   * twpConfig.setTargetLanguage("de",  true)
-   * @param {string} lang - langCode
-   * @param {boolean} forTextToo - also call setTargetLanguageTextTranslation
-   * @returns
-   */
-  twpConfig.setTargetLanguage = function (lang, forTextToo = false) {
-    const targetLanguages = twpConfig.get("targetLanguages");
-    lang = twpLang.fixTLanguageCode(lang);
-    if (!lang) return;
-
-    if (targetLanguages.indexOf(lang) === -1 || forTextToo) {
-      addTargetLanguage(lang);
-    }
-
-    twpConfig.set("targetLanguage", lang);
-
-    if (forTextToo) {
-      twpConfig.setTargetLanguageTextTranslation(lang);
-    }
-  };
 
   /**
    * convert object to map or set if necessary, otherwise return the value itself
    * @example
    * fixObjectType("customDictionary", {})
    * // returns Map
-   * fixObjectType("targetLanguages", ["en", "es", "de"])
-   * // return ["en", "es", "de"] -- Array
    * @param {string} key
    * @param {*} value
    * @returns {Map | Set | *}

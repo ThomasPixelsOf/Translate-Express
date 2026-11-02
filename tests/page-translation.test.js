@@ -74,7 +74,6 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
   };
   w.twpLang = { fixTLanguageCode: (c) => c, codeToLanguage: (c) => c };
   w.twpI18n = { getMessage: () => "" };
-  w.platformInfo = { isMobile: { any: false }, isDesktop: { any: true }, isFirefox: false };
   w.checkedLastError = () => {};
   w.fetch = async () => ({ ok: true, text: async () => "" });
   w.eval(read("contentScript/pageTranslator.js"));

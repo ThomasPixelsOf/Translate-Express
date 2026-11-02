@@ -919,27 +919,6 @@ const translationService = (function () {
   twpConfig.onReady(function () {
     const llmConfig = twpConfig.get("customServices").find((cs) => cs.name === "llm");
     if (llmConfig) serviceList.set("llm", createLlmService(llmConfig));
-
-    const proxyServers = twpConfig.get("proxyServers");
-    if (proxyServers?.google?.translateServer) {
-      const url = new URL(googleService.baseURL);
-      url.host = proxyServers.google.translateServer;
-      googleService.baseURL = url.toString();
-    }
-  });
-
-  twpConfig.onChanged((name, newValue) => {
-    if (name === "proxyServers") {
-      if (newValue?.google?.translateServer) {
-        const url = new URL(googleService.baseURL);
-        url.host = newValue.google.translateServer;
-        googleService.baseURL = url.toString();
-      } else {
-        const url = new URL(googleService.baseURL);
-        url.host = "translate-pa.googleapis.com";
-        googleService.baseURL = url.toString();
-      }
-    }
   });
 
   return translationService;

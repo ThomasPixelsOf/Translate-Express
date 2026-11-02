@@ -84,44 +84,10 @@ twpConfig.onReady(function () {
   "math", "mjx-container", "tex-math" // https://github.com/FilipePS/Traduzir-paginas-web/issues/704
   ];
 
-  if (location.hostname === "pdf.translatewebpages.org") {
-    const index = htmlTagsInlineText.indexOf("span");
-    if (index !== -1) {
-      htmlTagsInlineText.splice(index, 1);
-    }
-  }
-
-  // https://github.com/FilipePS/Traduzir-paginas-web/issues/609
-  if (
-    twpConfig.get("translateTag_pre") !== "yes" &&
-    !(
-      document.body.childElementCount === 1 &&
-      document.body.firstChild.nodeName.toLocaleLowerCase() === "pre"
-    )
-  ) {
-    htmlTagsInlineIgnore.push("pre");
-  }
   twpConfig.onChanged((name, newvalue) => {
-    switch (name) {
-      case "translateTag_pre":
-        const index = htmlTagsInlineIgnore.indexOf("pre");
-        if (index !== -1) {
-          htmlTagsInlineIgnore.splice(index, 1);
-        }
-        if (
-          newvalue !== "yes" &&
-          !(
-            document.body.childElementCount === 1 &&
-            document.body.firstChild.nodeName.toLocaleLowerCase() === "pre"
-          )
-        ) {
-          htmlTagsInlineIgnore.push("pre");
-        }
-        break;
-      case "pageTranslatorService":
-        // Groq key saved or removed while the page is open: follow it right away.
-        currentPageTranslatorService = newvalue;
-        break;
+    if (name === "pageTranslatorService") {
+      // Groq key saved or removed while the page is open: follow it right away.
+      currentPageTranslatorService = newvalue;
     }
   });
 
@@ -281,8 +247,6 @@ twpConfig.onReady(function () {
       service: currentPageTranslatorService,
       target: currentTargetLanguage,
       flags: {
-        dynamicContent: twpConfig.get("translateDynamicallyCreatedContent"),
-        iframes: twpConfig.get("enableIframePageTranslation"),
         diagnostics: twpConfig.get("diagnostics"),
       },
       pieces: {
@@ -472,12 +436,10 @@ twpConfig.onReady(function () {
     disableMutatinObserver();
     watchdogTimerHandler = everyUnlessOrphaned(watchdog, Number(twpConfig.get("diagWatchdogMs")) || 5000);
 
-    if (twpConfig.get("translateDynamicallyCreatedContent") == "yes") {
-      translateNewNodesTimerHandler = everyUnlessOrphaned(translateNewNodes, 2000);
-      sweepTimerHandler = everyUnlessOrphaned(sweepForMissedText, 4000);
-      mutationObserverActive = true;
-      mutationObserver.observe(document.body, MUTATION_OPTIONS);
-    }
+    translateNewNodesTimerHandler = everyUnlessOrphaned(translateNewNodes, 2000);
+    sweepTimerHandler = everyUnlessOrphaned(sweepForMissedText, 4000);
+    mutationObserverActive = true;
+    mutationObserver.observe(document.body, MUTATION_OPTIONS);
   }
 
   function disableMutatinObserver() {
@@ -838,33 +800,7 @@ twpConfig.onReady(function () {
 
   function translateTextContent(node, parentNode, text, toRestore) {
     toRestore.translatedText = text;
-
-    if (location.hostname === "pdf.translatewebpages.org") {
-      if (
-        parentNode &&
-        parentNode.nodeName.toLowerCase() === "span" &&
-        parentNode.getAttribute("role") === "presentation"
-      ) {
-        const oldClientWidth = node.parentNode.clientWidth;
-        node.textContent = text;
-        const newClientWidth = node.parentNode.clientWidth;
-        const transformMatch = parentNode.style.transform.match(
-          /[0-9]+[\.]{1,1}[0-9]*/
-        );
-        const currentScaleX = transformMatch
-          ? parseFloat(transformMatch[0])
-          : 1.0;
-        toRestore.originalScale = currentScaleX;
-        parentNode.style.transform = `scaleX(${
-          currentScaleX *
-          Math.min(currentScaleX, oldClientWidth / newClientWidth)
-        })`;
-      } else {
-        node.textContent = text;
-      }
-    } else {
-      node.textContent = text;
-    }
+    node.textContent = text;
 
     markSeen(node);
     translatedNodesCount++;
@@ -933,7 +869,6 @@ twpConfig.onReady(function () {
             original: originalTextNode,
             originalText: originalTextNode.textContent,
             translatedText: translated,
-            originalScale: null,
             parentNode,
           };
           nodesToRestore.push(toRestore);
@@ -1196,19 +1131,6 @@ twpConfig.onReady(function () {
       currentTargetLanguage = targetLanguage;
     }
 
-    // https://github.com/FilipePS/Traduzir-paginas-web/issues/619
-    if (
-      location.hostname === "sberbank.com" ||
-      location.hostname === "www.sberbank.com"
-    ) {
-      document.body.classList.remove("notranslate");
-    }
-
-    if (location.hostname === "pdf.translatewebpages.org") {
-      document.getElementById("scaleSelect").value = "1.5";
-      document.getElementById("scaleSelect").dispatchEvent(new Event("change"));
-    }
-
     piecesToTranslate = getPiecesToTranslate();
     seenTextNodes = new WeakSet();
     piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((n) => seenTextNodes.add(n)));
@@ -1268,9 +1190,6 @@ twpConfig.onReady(function () {
       } else {
         ntr.node.replaceWith(ntr.original);
       }
-      if (ntr.originalScale) {
-        ntr.parentNode.style.transform = `scaleX(${ntr.originalScale}`;
-      }
     }
     nodesToRestore = [];
 
@@ -1308,11 +1227,7 @@ twpConfig.onReady(function () {
       (result) => {
         checkedLastError();
 
-        if (
-          result === "translated" &&
-          pageLanguageState === "original" &&
-          twpConfig.get("enableIframePageTranslation") === "yes"
-        ) {
+        if (result === "translated" && pageLanguageState === "original") {
           pageTranslator.translatePage();
         }
       }

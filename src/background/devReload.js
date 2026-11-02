@@ -12,9 +12,9 @@ const DEV_FILES = [
   "/background/devReload.js", "/background/diagnostics.js", "/background/llmService.js", "/background/menu.js", "/background/skipTargetLanguage.js",
   "/background/translationService.js", "/bg.js", "/composer/composer.css", "/composer/composer.html", "/composer/composer.js",
   "/contentScript/pageTranslator.js", "/contentScript/panel.js",
-  "/lib/XMLHttpRequestShim.js", "/lib/checkedLastError.js", "/lib/config.js", "/lib/ui-text.js", "/lib/ui/en.js", "/lib/ui/fr.js", "/lib/languages.js", "/lib/platformInfo.js",
+  "/lib/XMLHttpRequestShim.js", "/lib/checkedLastError.js", "/lib/config.js", "/lib/ui-text.js", "/lib/ui/en.js", "/lib/ui/fr.js", "/lib/languages.js",
   "/popup/popup.css", "/popup/popup.html", "/popup/popup.js", "/dashboard/dashboard.css", "/dashboard/dashboard.html", "/dashboard/dashboard.js", "/dashboard/metrics.js",
-  "/lib/stuff.js", "/manifest.json", "/setup/setup.css", "/setup/setup.html", "/setup/setup.js",
+  "/manifest.json", "/setup/setup.css", "/setup/setup.html", "/setup/setup.js",
 ];
 const DEV_ALARM = "twp-dev-reload";
 const DEV_STORAGE_KEY = "devFilesStamp";

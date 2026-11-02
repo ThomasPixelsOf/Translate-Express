@@ -32,7 +32,6 @@
         "/lib/checkedLastError.js",
         "/lib/languages.js",
         "/lib/config.js",
-        "/lib/platformInfo.js",
         "/lib/ui-text.js",
         "/lib/ui/en.js",
         "/lib/ui/fr.js",
