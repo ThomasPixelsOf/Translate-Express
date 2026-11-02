@@ -185,7 +185,10 @@
     return { text: selectionText, scope: "selection" };
   }
 
+  let anchorOverride = null; // emplacement du texte sélectionné au moment du clic sur la bulle
+
   function anchorRect() {
+    if (mode === "selection" && anchorOverride) return anchorOverride;
     if (mode === "field" && field && document.contains(field)) return field.getBoundingClientRect();
     const sel = window.getSelection();
     if (sel && sel.rangeCount && !sel.isCollapsed) {
@@ -403,14 +406,19 @@
       // La sélection doit survivre au clic sur la bulle.
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {
+        // Le petit panneau s'ouvre juste sous le texte sélectionné (le bouton « Window » ouvre le volet de la page).
         const current = selectedPlainText() || bubble.text;
+        mode = "selection";
+        selectionText = current;
+        anchorOverride = bubble.anchor || null;
         hideBubble();
-        try { chrome.runtime.sendMessage({ action: "twpOpenComposer", text: current }); } catch (e) {}
+        show(true);
       });
       document.documentElement.appendChild(host);
       bubble = { host, el, timer: null, text };
     }
     bubble.text = text;
+    bubble.anchor = { left: last.left, right: last.right, top: last.top, bottom: last.bottom };
     const size = 28;
     bubble.el.style.left = Math.max(4, Math.min(window.innerWidth - size - 4, last.right + 4)) + "px";
     bubble.el.style.top = Math.max(4, Math.min(window.innerHeight - size - 4, last.bottom + 4)) + "px";
@@ -478,13 +486,17 @@
     },
     true
   );
-  window.addEventListener("scroll", place, true);
+  window.addEventListener("scroll", () => {
+    anchorOverride = null; // après un défilement, on se recale sur la sélection actuelle
+    place();
+  }, true);
   window.addEventListener("resize", place);
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "twpPanel") {
       mode = request.mode;
       selectionText = request.text || "";
+      anchorOverride = null;
       if (mode === "field") {
         const active = editableRoot(document.activeElement);
         if (!field || !document.contains(field)) field = isEditable(active) ? active : null;

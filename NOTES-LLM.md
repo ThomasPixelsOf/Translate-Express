@@ -7,7 +7,7 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 
 | Où on clique | Entrée | Effet |
 |---|---|---|
-| quand on sélectionne du texte | une **bulle « A »** apparaît près de la sélection | un clic ouvre le volet de la page avec le texte à gauche et sa traduction à droite ; case « Show a bubble when I select text » du menu pour la couper (elle s'efface seule après 8 s) |
+| quand on sélectionne du texte | une **bulle « A »** apparaît près de la sélection | un clic ouvre un petit panneau flottant juste sous le texte avec la traduction (Copy ; le bouton Window l'ouvre dans le volet de la page) ; case « Show a bubble when I select text » du menu pour couper la bulle (elle s'efface seule après 8 s) |
 | sur du texte sélectionné | **Translate selection** | un panneau s'ouvre près de la sélection avec la traduction (Copy) |
 | dans un champ de saisie | **Translate what I'm writing** | panneau avec la traduction en direct de ce qu'on écrit ; **Replace** remplace le texte du champ (ou la partie sélectionnée) |
 | sur la page | **Translate this page to ...** / **Show original page** | traduit toute la page, puis revient à l'original |
