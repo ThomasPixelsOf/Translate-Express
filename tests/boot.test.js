@@ -92,6 +92,8 @@ function chargerBg(sandbox) {
 test("le manifeste est valide et ne référence que des fichiers qui existent", () => {
   const m = JSON.parse(fs.readFileSync(path.join(SRC, "manifest.json"), "utf8"));
   assert.equal(m.manifest_version, 3);
+  assert.equal(m.name, "Translate Express");
+  assert.match(m.version, /^1[.][0-9]+[.][0-9]+$/, "numérotation propre à l'extension, distincte de celle de TWP");
   assert.equal(m.background.service_worker, "bg.js");
   const fichiers = [
     ...Object.values(m.icons),

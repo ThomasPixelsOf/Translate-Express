@@ -1,4 +1,7 @@
-# TWP minimal : le menu du clic droit, et rien d'autre
+# Translate Express (version 1.0.0)
+
+Extension personnelle basée sur TWP (Translate Web Pages, branche `chrome-mv3` 10.2.5.0) ; numérotation de version propre : 1.0.0. Le nom « TWP » ne sert plus que pour désigner le code d'origine.
+
 
 Branche `minimal`, bâtie sur la branche `chrome-mv3` (version 10.2.5.0) de https://github.com/FilipePS/Traduzir-paginas-web.
 L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas de raccourcis clavier, pas de bouton flottant. Tout se fait par le **menu du clic droit**.
