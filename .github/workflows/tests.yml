@@ -14,12 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
+          bun-version: 1.3.10
 
-      - name: Install jsdom (the page, panel, popup and settings tests need it)
-        run: npm install --no-save --no-package-lock jsdom@30.1.3
+      - name: Install the test dependencies (happy-dom)
+        run: bun install --frozen-lockfile
 
-      - name: Run tests
-        run: node --test "tests/*.test.js"
+      - name: Run the tests
+        run: bun test

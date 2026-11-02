@@ -1,21 +1,17 @@
-// Test of the toolbar popup page (src/popup/popup.js) in a simulated page (jsdom).
+// Test of the toolbar popup page (src/popup/popup.js) in a simulated page (happy-dom).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-let JSDOM = null;
-for (const where of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM } = require(where)); break; } catch (e) { /* try the next place */ }
-}
-const skipReason = JSDOM ? false : "jsdom not found";
+const { available, createWindow, attachFrame } = require("./dom.js");
+const skipReason = available ? false : "happy-dom not found";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const SRC = path.join(__dirname, "..", "src");
 
 function createPopup(sessionData = {}) {
   const html = fs.readFileSync(path.join(SRC, "popup", "popup.html"), "utf8").replace(/<script[^>]*><\/script>/g, "");
-  const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://ext.example/popup/popup.html" });
-  const w = dom.window;
+  const w = createWindow(html, { url: "https://ext.example/popup/popup.html" });
   const session = { ...sessionData };
   const removed = [];
   w.close = () => { w.closed = true; };

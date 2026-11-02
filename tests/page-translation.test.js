@@ -1,19 +1,16 @@
-// Test of page translation (src/contentScript/pageTranslator.js) in a simulated page (jsdom).
-// jsdom is looked up in node_modules; without it, this file is skipped.
+// Test of page translation (src/contentScript/pageTranslator.js) in a simulated page (happy-dom).
+// happy-dom is looked up in node_modules; without it, this file is skipped.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-let JSDOM = null, VirtualConsole = null;
-for (const filePath of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM, VirtualConsole } = require(filePath)); break; } catch (e) { /* next */ }
-}
+const { available, createWindow, attachFrame } = require("./dom.js");
 const SRC = path.join(__dirname, "..", "src");
 const read = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A page of 6 paragraphs positioned by data-top / data-bottom (jsdom does no layout).
+// A page of 6 paragraphs positioned by data-top / data-bottom (the simulated page does no layout).
 function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = {}) {
   const rows = [
     ["p1", 20, 60], ["p2", 80, 120], ["p3", 140, 180], // on screen (height 600)
@@ -22,10 +19,7 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
     ["tall", -2000, 5000],                              // a block taller than the screen: it covers the whole screen
   ];
   const body = rows.map(([id, h, b]) => `<p id="${id}" data-top="${h}" data-bottom="${b}">English text number ${id} for translation.</p>`).join("");
-  const virtualConsole = new VirtualConsole();
-  if (process.env.TWP_DEBUG) for (const ev of ["log", "warn", "error", "jsdomError"]) virtualConsole.on(ev, (...a) => console.log("page", ev, ...a.map((x) => (x && x.message) || x)));
-  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/", virtualConsole });
-  const w = dom.window;
+  const w = createWindow(`<!doctype html><html><body>${body}</body></html>`);
   w.eval(`Object.defineProperty(window, "innerHeight", { value: 600, configurable: true });`);
   w.HTMLElement.prototype.getBoundingClientRect = function () {
     if (this.hasAttribute("data-hidden")) return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }; // hidden (display:none)
@@ -82,7 +76,7 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
   return { w, requests, priorities, send, text };
 }
 
-const skipReason = JSDOM ? false : "jsdom not found";
+const skipReason = available ? false : "happy-dom not found";
 
 test("simulated page: text on screen, below the screen and a block taller than the screen are translated; very distant text is translated afterwards", { skip: skipReason, timeout: 30000 }, async () => {
   const page = createPage();

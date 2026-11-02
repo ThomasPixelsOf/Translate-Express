@@ -80,7 +80,7 @@ The bubble's panel keeps the translations it has already obtained (same text and
 
 ## Fully translated page (original defects fixed)
 
-The original translator left parts of the page in their original version for two reasons, fixed in `pageTranslator.js`: (1) a piece was marked "translated" before being sent; if the answer failed or came back empty, it was never retried; it now is, up to 6 times with an increasing delay (2 s to 30 s); (2) a piece taller than the screen (top above, bottom below) was never sent; any piece with a part in the visible area now is. Text is also translated three quarters of a screen ahead below the visible area, to be ready when scrolling. `tests/page-translation.test.js` simulates a page (jsdom): these tests fail on the old code and pass on the new one.
+The original translator left parts of the page in their original version for two reasons, fixed in `pageTranslator.js`: (1) a piece was marked "translated" before being sent; if the answer failed or came back empty, it was never retried; it now is, up to 6 times with an increasing delay (2 s to 30 s); (2) a piece taller than the screen (top above, bottom below) was never sent; any piece with a part in the visible area now is. Text is also translated three quarters of a screen ahead below the visible area, to be ready when scrolling. `tests/page-translation.test.js` simulates a page (happy-dom): these tests fail on the old code and pass on the new one.
 
 ## Multilingual pages
 
@@ -155,7 +155,8 @@ Popup (replaced by our own toolbar popup), options page, shortcuts, floating but
 | `src/popup/` | the toolbar popup: tabs that show the three pages below |
 | `src/composer/`, `src/setup/`, `src/dashboard/` | the Translate, Settings and Dashboard views of the popup |
 | `src/lib/` | configuration, languages, original utilities |
-| `tests/` | tests without network: `node --test "tests/*.test.js"` |
+| `tests/` | tests without network: `bun test` (or `node --test "tests/*.test.js"`); `tests/dom.js` is the simulated page |
+| `package.json`, `bun.lock` | the test dependency (happy-dom) only: the extension has no dependency and no build step |
 
 ## Usage
 
@@ -177,13 +178,13 @@ Our history does not contain the original project's (only its 10.2.5.0 state in 
 git remote add upstream https://github.com/FilipePS/Traduzir-paginas-web.git
 git fetch upstream chrome-mv3
 git diff <first-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js
-node --test "tests/*.test.js"
+bun test
 ```
 
 `<first-commit>` is the very first commit of this repository (`git rev-list --max-parents=0 HEAD`). The diff shows what changed in the original project since our base; what touches `pageTranslator.js` and Google's translation logic is taken by hand, keeping our version of the rest (many files were removed or rewritten: `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
 
 ## Good to know
 
-- The tests (112) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 36 of them (page, panel, popup and settings) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- The tests (116) check the AI service, the manifest, the service worker start, the menu, the bubble and the panel (also across frames), page translation, the popup views, the settings page, the language names and the dashboard. Some use fake `chrome` objects; those that need a page use happy-dom (`tests/dom.js`), which runs under Bun and Node. They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: automatically sending back to Groq the texts that came back unchanged.

@@ -1,0 +1,13 @@
+{
+  "name": "translate-express",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser extension that translates web pages, selected text and what you write. Only the tests need these dependencies: the extension itself has none.",
+  "license": "MPL-2.0",
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "happy-dom": "21.0.4"
+  }
+}

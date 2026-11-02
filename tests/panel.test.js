@@ -1,25 +1,21 @@
-// Test of the bubble and the panel (src/contentScript/panel.js) in a simulated page (jsdom).
-// jsdom is looked up in node_modules; without it, this file is skipped.
+// Test of the bubble and the panel (src/contentScript/panel.js) in a simulated page (happy-dom).
+// happy-dom is looked up in node_modules; without it, this file is skipped.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-let JSDOM = null;
-for (const filePath of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM } = require(filePath)); break; } catch (e) { /* next */ }
-}
-const skipReason = JSDOM ? false : "jsdom not found";
+const { available, createWindow, attachFrame } = require("./dom.js");
+const skipReason = available ? false : "happy-dom not found";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const CODE = fs.readFileSync(path.join(__dirname, "..", "src", "contentScript", "panel.js"), "utf8");
 
 function createPage({ showBubbleSetting = "yes" } = {}) {
-  const dom = new JSDOM(`<!doctype html><html><body>
+  const w = createWindow(`<!doctype html><html><body>
     <p id="p">Bonjour tout le monde, ceci est un text de la page.</p>
     <textarea id="t" style="width:300px">Bonjour a tous, voici mon message en francais pour vous.</textarea>
     <input id="mdp" type="password" value="secret-mot-de-passe">
-  </body></html>`, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/" });
-  const w = dom.window;
+  </body></html>`);
   const sentMessages = [];
   w.chrome = {
     runtime: {
@@ -41,7 +37,7 @@ function createPage({ showBubbleSetting = "yes" } = {}) {
     getLanguageList: () => ({ fr: "Français", en: "English" }), TargetLanguages: ["fr", "en"], fixTLanguageCode: (c) => c,
     fillLanguageSelect: (sel) => { for (const c of ["fr", "en"]) { const o = sel.ownerDocument.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); } },
   };
-  // jsdom does no layout: rectangles provided by hand.
+  // the simulated page does no layout: rectangles provided by hand.
   const rect = { left: 10, right: 200, top: 100, bottom: 130, width: 190, height: 30 };
   w.Range.prototype.getClientRects = () => [rect];
   w.Range.prototype.getBoundingClientRect = () => rect;

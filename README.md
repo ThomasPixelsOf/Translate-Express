@@ -65,15 +65,16 @@ While developing, the extension reloads itself within about 30 seconds of a file
 ## Tests
 
 ```
-node --test "tests/*.test.js"
+bun install   # the test dependencies (happy-dom); the extension itself has none
+bun test
 ```
 
-The page, panel, popup and settings tests use [jsdom](https://github.com/jsdom/jsdom); install it first (`npm install jsdom`) or those tests are skipped. The continuous integration installs it, so all the tests run there.
+The tests also run with Node (`node --test "tests/*.test.js"`): they do not depend on the runner. The page, panel, popup and settings tests use [happy-dom](https://github.com/capricorn86/happy-dom) as a simulated browser page (`tests/dom.js`); the others use fake `chrome` objects. The continuous integration runs everything with Bun.
 
 ## More
 
-- [NOTES-LLM.md](NOTES-LLM.md): design notes (menu, languages, priorities, token budget, resilience, diagnostics, update procedure).
-- [PRIVACY](PRIVACY): what is sent where.
+- [docs/design-notes.md](docs/design-notes.md): design notes (menu, languages, priorities, token budget, resilience, diagnostics, update procedure).
+- [PRIVACY.md](PRIVACY.md): what is sent where.
 
 ## Security
 

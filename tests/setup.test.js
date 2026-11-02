@@ -1,21 +1,17 @@
-// Test of the settings page (src/setup/setup.js), including the interface language setting, in a simulated page (jsdom).
+// Test of the settings page (src/setup/setup.js), including the interface language setting, in a simulated page (happy-dom).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-let JSDOM = null;
-for (const where of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM } = require(where)); break; } catch (e) { /* try the next place */ }
-}
-const skipReason = JSDOM ? false : "jsdom not found";
+const { available, createWindow, attachFrame } = require("./dom.js");
+const skipReason = available ? false : "happy-dom not found";
 const SRC = path.join(__dirname, "..", "src");
 const read = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
 
 function createSetup(saved = {}) {
   const html = read("setup/setup.html").replace(/<script[^>]*><\/script>/g, "");
-  const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://ext.example/setup/setup.html?focus=languages" });
-  const w = dom.window;
+  const w = createWindow(html, { url: "https://ext.example/setup/setup.html?focus=languages" });
   const settings = { uiLanguage: "default", targetLanguage: "fr", writeLanguage: "en", customServices: [], enabledServices: ["google"], pageTranslatorService: "google", ...saved };
   const written = [];
   w.checkedLastError = () => {};

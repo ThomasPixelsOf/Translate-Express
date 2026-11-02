@@ -56,6 +56,8 @@ const twpLang = (function () {
       trp: "Kokborok",
       uzbcyr: "Uzbek (Cyrillic)",
       yua: "Yucatec Maya",
+      kek: "Qʼeqchiʼ",
+      "tlh-Piqd": "Klingon (pIqaD)",
     },
     fr: {
       "zh-CN": "chinois (simplifié)",
@@ -84,6 +86,7 @@ const twpLang = (function () {
       trp: "kok borok",
       uzbcyr: "ouzbek (cyrillique)",
       yua: "maya yucatèque",
+      "tlh-Piqd": "klingon (piqad)",
     },
   };
 

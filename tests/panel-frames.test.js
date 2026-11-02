@@ -1,27 +1,20 @@
 // The translation panel is shown by the top page, not inside the small frame where the text was selected
-// (a frame, like the editing area of a rich-text editor, would clip it). Simulated with jsdom: a page with an iframe.
+// (a frame, like the editing area of a rich-text editor, would clip it). Simulated with happy-dom: a page with an iframe.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-let JSDOM = null;
-for (const where of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM } = require(where)); break; } catch (e) { /* try the next place */ }
-}
-const skipReason = JSDOM ? false : "jsdom not found";
+const { available, createWindow, attachFrame } = require("./dom.js");
+const skipReason = available ? false : "happy-dom not found";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const SRC = path.join(__dirname, "..", "src");
 const read = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
 
 function createPageWithFrame() {
-  const dom = new JSDOM('<!DOCTYPE html><html><body><p id="top">Top page.</p><iframe id="editor"></iframe></body></html>', {
-    runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/",
-  });
-  const top = dom.window;
+  const top = createWindow('<!DOCTYPE html><html><body><p id="top">Top page.</p><iframe id="editor"></iframe></body></html>');
   const frameEl = top.document.getElementById("editor");
-  const child = frameEl.contentWindow;
-  child.document.body.innerHTML = '<textarea id="t" style="width:300px">Bonjour a tous, voici un message</textarea>';
+  const child = attachFrame(top, frameEl, '<!DOCTYPE html><html><body><textarea id="t" style="width:300px">Bonjour a tous, voici un message</textarea></body></html>');
 
   const listeners = new Map(); // window -> chrome.runtime.onMessage listeners
   const sent = [];
@@ -66,14 +59,14 @@ function createPageWithFrame() {
       getLanguageList: () => ({ fr: "Français", en: "English" }), TargetLanguages: ["fr", "en"], fixTLanguageCode: (c) => c,
       fillLanguageSelect: (sel) => { for (const c of ["fr", "en"]) { const o = sel.ownerDocument.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); } },
     };
-    // jsdom does no layout: rectangles provided by hand (the frame sits at x=50, y=300 in the top page)
+    // the simulated page does no layout: rectangles provided by hand (the frame sits at x=50, y=300 in the top page)
     const rect = { left: 10, right: 200, top: 100, bottom: 130, width: 190, height: 30 };
     w.Range.prototype.getClientRects = () => [rect];
     w.Range.prototype.getBoundingClientRect = () => rect;
     w.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 10, right: 310, top: 200, bottom: 260, width: 300, height: 60 });
     for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js"]) w.eval(read(f) + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
   }
-  // jsdom does not set `event.source` for postMessage, as a real browser does: do it here
+  // a simulated page does not tie `event.source` to the window that posted the message, as a real browser does: do it here
   const deliver = (target, source) => (data) => setTimeout(() => target.dispatchEvent(new target.MessageEvent("message", { data, source, origin: "https://exemple.test" })), 0);
   top.postMessage = deliver(top, child); // called by the frame as window.parent.postMessage
   child.postMessage = deliver(child, top); // called by the top page as event.source.postMessage
