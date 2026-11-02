@@ -185,6 +185,6 @@ bun test
 
 ## Good to know
 
-- The tests (116) check the AI service, the manifest, the service worker start, the menu, the bubble and the panel (also across frames), page translation, the popup views, the settings page, the language names and the dashboard. Some use fake `chrome` objects; those that need a page use happy-dom (`tests/dom.js`), which runs under Bun and Node. They do not replace a try in the browser.
+- The tests (116) check the AI service, the manifest, the service worker start, the menu, the bubble and the panel (also across frames), page translation, the popup views, the settings page, the language names and the dashboard. Some use fake `chrome` objects; those that need a page use happy-dom (`tests/dom.js`), which runs under Bun and under Node (both are run on every push, and Bun gates a release). They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: automatically sending back to Groq the texts that came back unchanged.

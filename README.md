@@ -66,10 +66,11 @@ While developing, the extension reloads itself within about 30 seconds of a file
 
 ```
 bun install   # the test dependencies (happy-dom); the extension itself has none
-bun test
+bun test      # with Bun
+bun run test:node   # with Node (`node --test "tests/*.test.js"`), same tests
 ```
 
-The tests also run with Node (`node --test "tests/*.test.js"`): they do not depend on the runner. The page, panel, popup and settings tests use [happy-dom](https://github.com/capricorn86/happy-dom) as a simulated browser page (`tests/dom.js`); the others use fake `chrome` objects. The continuous integration runs everything with Bun.
+Both runners are supported and checked on every push: the tests do not depend on the runner. The page, panel, popup and settings tests use [happy-dom](https://github.com/capricorn86/happy-dom) as a simulated browser page (`tests/dom.js`); the others use fake `chrome` objects. The continuous integration runs everything with Bun and with Node.
 
 ## More
 

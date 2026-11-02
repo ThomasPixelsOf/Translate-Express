@@ -1,5 +1,6 @@
 name: Tests
 
+# The same tests run with both runners: Bun and Node.
 on:
   push:
     branches: [main]
@@ -9,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  bun:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,5 +22,24 @@ jobs:
       - name: Install the test dependencies (happy-dom)
         run: bun install --frozen-lockfile
 
-      - name: Run the tests
+      - name: Run the tests with Bun
         run: bun test
+
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2 # Bun installs the dependencies from bun.lock
+        with:
+          bun-version: 1.3.10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the test dependencies (happy-dom)
+        run: bun install --frozen-lockfile
+
+      - name: Run the tests with Node
+        run: node --test "tests/*.test.js"
