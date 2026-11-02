@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>TWP - Groq key</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="setup.css" />
+</head>
+
+<body>
+  <h1>Groq key</h1>
+  <p>Paste your Groq API key: the AI becomes your translator. The model is chosen automatically.
+    The key stays in this browser. The text you translate is sent to Groq.</p>
+
+  <label for="key">API key</label>
+  <input type="password" id="key" placeholder="gsk_..." autocomplete="off" spellcheck="false" autofocus>
+
+  <details>
+    <summary>Model</summary>
+    <select id="model"><option value="">Automatic (recommended)</option></select>
+    <button id="load" type="button">Load the list</button>
+  </details>
+
+  <div class="buttons">
+    <button id="save" class="primary">Save</button>
+    <button id="remove">Remove the key</button>
+  </div>
+  <p id="status" aria-live="polite"></p>
+
+  <script src="/lib/checkedLastError.js"></script>
+  <script src="/lib/stuff.js"></script>
+  <script src="/lib/languages.js"></script>
+  <script src="/lib/config.js"></script>
+  <script src="/lib/platformInfo.js"></script>
+  <script src="setup.js"></script>
+</body>
+
+</html>

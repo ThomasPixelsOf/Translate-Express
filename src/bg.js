@@ -1,22 +1,5 @@
-/*
-    "scripts": [
-      "/lib/polyfill.js",
-      "/lib/checkedLastError.js",
-      "/lib/stuff.js",
-      "/lib/languages.js",
-      "/lib/config.js",
-      "/lib/platformInfo.js",
-      "/lib/i18n.js",
-      "/background/translationCache.js",
-      "/background/translationService.js",
-      "/background/textToSpeech.js",
-      "/background/background.js"
-    ]
-*/
-
-
-importScripts('/lib/XMLHttpRequestShim.js');
-importScripts("/lib/polyfill.js");
+// Service worker de l'extension : tout ce qui tourne en arrière-plan.
+importScripts("/lib/XMLHttpRequestShim.js");
 importScripts("/lib/checkedLastError.js");
 importScripts("/lib/stuff.js");
 importScripts("/lib/languages.js");
@@ -26,5 +9,4 @@ importScripts("/lib/i18n.js");
 importScripts("/background/translationCache.js");
 importScripts("/background/llmService.js");
 importScripts("/background/translationService.js");
-importScripts("/background/textToSpeech.js");
-importScripts("/background/background.js");
+importScripts("/background/menu.js");

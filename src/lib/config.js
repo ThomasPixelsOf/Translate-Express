@@ -13,7 +13,7 @@ const twpConfig = (function () {
     pageTranslatorService: "google", // google yandex bing
     textTranslatorService: "google", // google yandex bing deepl
     textToSpeechService: "google", // google bing
-    enabledServices: ["google", "bing", "yandex", "deepl"],
+    enabledServices: ["google"],
     ttsSpeed: 1.0,
     ttsVolume: 1.0,
     targetLanguage: null,
@@ -547,7 +547,7 @@ const twpConfig = (function () {
    * @returns {string} newServiceName
    */
   twpConfig.swapPageTranslationService = function () {
-    const pageTranslationServices = ["google", "bing", "yandex", "llm"];
+    const pageTranslationServices = ["google", "llm"];
     const pageEnabledServices = twpConfig
       .get("enabledServices")
       .filter((svName) => pageTranslationServices.includes(svName));
