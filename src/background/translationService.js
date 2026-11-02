@@ -1544,7 +1544,7 @@ const translationService = (function () {
     })();
   };
 
-  // LLM : service par modèle de langage (Groq, OpenRouter...), voir llmService.js
+  // LLM : service par modèle de langage (Groq), voir llmService.js
   const createLlmService = (cfg) => twpLlm.create(Service, Utils, cfg);
 
   /** @type {Map<string, Service>} */
@@ -1715,6 +1715,23 @@ const translationService = (function () {
       );
     } else if (request.action === "removeLibreService") {
       serviceList.delete("libre");
+    } else if (request.action === "llmModels") {
+      twpLlm
+        .listModels(request.llm)
+        .then((models) => sendResponse({ ok: true, models }))
+        .catch((e) => sendResponse({ ok: false, error: String(e && e.message ? e.message : e) }));
+      return true;
+    } else if (request.action === "llmLive") {
+      const llmConfig = twpConfig.get("customServices").find((cs) => cs.name === "llm");
+      if (!llmConfig) {
+        sendResponse({ ok: false, error: "no-key" });
+        return true;
+      }
+      twpLlm
+        .translateFree(llmConfig, request.sourceLanguage, request.targetLanguage, request.text, request.tone)
+        .then((text) => sendResponse({ ok: true, text }))
+        .catch((e) => sendResponse({ ok: false, error: String(e && e.message ? e.message : e) }));
+      return true;
     } else if (request.action === "testLlmService") {
       twpLlm
         .tester(request.llm)

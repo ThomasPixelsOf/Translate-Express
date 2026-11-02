@@ -1343,26 +1343,52 @@ twpConfig
       );
     };
 
-    // service de traduction par modele de langage (Groq, OpenRouter...)
+    // service de traduction par modele de langage (Groq)
     {
       const llmFromForm = () => ({
         name: "llm",
-        provider: $("#llmProvider").value,
-        url: $("#llmURL").value.trim(),
+        provider: "auto",
         apiKey: $("#llmKEY").value.trim(),
         model: $("#llmModel").value.trim(),
       });
-      const updateLlmUrlBlock = () => {
-        $("#llmUrlBlock").style.display = $("#llmProvider").value === "custom" ? "block" : "none";
+
+      // Menu déroulant des modèles : rempli depuis le fournisseur avec la clé saisie.
+      const setModelOptions = (models, selected) => {
+        const select = $("#llmModel");
+        select.textContent = "";
+        const add = (value, label) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          select.appendChild(option);
+        };
+        add("", "Automatic (recommended)");
+        for (const m of models) add(m.id, m.id);
+        if (selected && !models.some((m) => m.id === selected)) add(selected, selected);
+        select.value = selected || "";
       };
-      $("#llmProvider").onchange = updateLlmUrlBlock;
+      $("#llmLoadModels").onclick = () => {
+        const llm = llmFromForm();
+        if (llm.apiKey.length < 10) {
+          $("#llmResponse").textContent = "Paste your API key first.";
+          return;
+        }
+        $("#llmResponse").textContent = "Loading models...";
+        chrome.runtime.sendMessage({ action: "llmModels", llm }, (r) => {
+          checkedLastError();
+          if (r && r.ok) {
+            setModelOptions(r.models, llm.model);
+            $("#llmResponse").textContent = r.models.length + " models available.";
+          } else {
+            $("#llmResponse").textContent = "Failed: " + (r ? r.error : "no answer");
+          }
+        });
+      };
 
       $("#saveLlm").onclick = () => {
         const llm = llmFromForm();
         try {
-          if (llm.provider === "custom") new URL(llm.url);
           if (llm.apiKey.length < 10) throw new Error("Provide an API key");
-          if (!llm.model) throw new Error("Provide a model");
           const customServices = twpConfig.get("customServices").filter((cs) => cs.name !== "llm");
           customServices.push(llm);
           twpConfig.set("customServices", customServices);
@@ -1372,7 +1398,10 @@ twpConfig
           const option = $('#pageTranslatorService option[value="llm"]');
           if (option) option.removeAttribute("hidden");
           chrome.runtime.sendMessage({ action: "createLlmService", llm }, checkedLastError);
-          $("#llmResponse").textContent = "Saved. Choose \"AI (Groq / OpenRouter)\" as the page translation service.";
+          // zéro réglage : l'IA devient directement le traducteur de pages
+          twpConfig.set("pageTranslatorService", "llm");
+          $("#pageTranslatorService").value = "llm";
+          $("#testLlm").click();
         } catch (e) {
           alert(e);
         }
@@ -1382,7 +1411,8 @@ twpConfig
         $("#llmResponse").textContent = "Testing...";
         chrome.runtime.sendMessage({ action: "testLlmService", llm: llmFromForm() }, (r) => {
           checkedLastError();
-          $("#llmResponse").textContent = r && r.ok ? "OK (" + r.ms + " ms): " + r.text : "Failed: " + (r ? r.error : "no answer");
+          $("#llmResponse").textContent =
+            r && r.ok ? "Ready (" + r.provider + ", " + r.model + ", " + r.ms + " ms): " + r.text : "Failed: " + (r ? r.error : "no answer");
         });
       };
 
@@ -1397,19 +1427,16 @@ twpConfig
         const option = $('#pageTranslatorService option[value="llm"]');
         if (option) option.setAttribute("hidden", "");
         $("#llmKEY").value = "";
-        $("#llmModel").value = "";
-        $("#llmURL").value = "";
+        setModelOptions([], "");
         $("#llmResponse").textContent = "Removed.";
       };
 
       const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
       if (llm) {
-        $("#llmProvider").value = llm.provider || "groq";
-        $("#llmURL").value = llm.url || "";
         $("#llmKEY").value = llm.apiKey || "";
-        $("#llmModel").value = llm.model || "";
+        setModelOptions([], llm.model || "");
+        if (llm.apiKey) $("#llmLoadModels").click();
       }
-      updateLlmUrlBlock();
     }
 
     // experimental options

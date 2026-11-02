@@ -290,7 +290,7 @@
             <option value="google">Google</option>
             <option value="bing">Bing</option>
             <option value="yandex">Yandex</option>
-            <option value="llm" hidden>AI (Groq / OpenRouter)</option>
+            <option value="llm" hidden>AI (Groq)</option>
           </select>
           <br />
           <p>
@@ -579,35 +579,28 @@
 
       <div id="experimental" class="w3-container">
         <div>
-          <h3>AI translation of pages (Groq, OpenRouter or any OpenAI-compatible API)</h3>
+          <h3>AI translation (Groq)</h3>
           <p>
-            Page text is sent to the provider you choose below, with your own API key. The key stays in this browser's extension storage.
-            After saving, choose "AI (Groq / OpenRouter)" as the page translation service.
+            Paste your Groq API key and you are done: the model is chosen automatically and the AI becomes your page translator.
+            Page text is sent to Groq. The key stays in this browser's extension storage.
           </p>
-          <label for="llmProvider">Provider</label><br>
-          <select id="llmProvider">
-            <option value="groq">Groq</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="custom">Custom (OpenAI-compatible)</option>
-          </select><br>
-          <br>
-          <div id="llmUrlBlock" style="display: none;">
-            <label for="llmURL">Chat completions URL</label><br>
-            <input type="text" id="llmURL" placeholder="https://my-server/v1/chat/completions" style="width: 90%;"
-              autocomplete="off" spellcheck="false"><br>
-            <br>
-          </div>
           <label for="llmKEY">API key</label><br>
-          <input type="password" id="llmKEY" placeholder="gsk_... or sk-or-..." style="width: 90%;"
+          <input type="password" id="llmKEY" placeholder="gsk_..." style="width: 90%;"
             autocomplete="off" spellcheck="false"><br>
           <br>
-          <label for="llmModel">Model</label><br>
-          <input type="text" id="llmModel" placeholder="e.g. a Groq or OpenRouter model id" style="width: 90%;"
-            autocomplete="off" spellcheck="false"><br>
-          <br>
-          <button id="saveLlm">Save AI service</button>
+          <details>
+            <summary>Advanced</summary>
+            <br>
+            <label for="llmModel">Model</label><br>
+            <select id="llmModel" style="max-width: 90%;">
+              <option value="">Automatic (recommended)</option>
+            </select>
+            <button id="llmLoadModels" type="button">Load the list of models</button><br>
+            <br>
+          </details>
+          <button id="saveLlm">Save</button>
           <button id="testLlm">Test</button>
-          <button id="removeLlm">Remove AI service</button>
+          <button id="removeLlm">Remove</button>
           <p id="llmResponse"></p>
         </div>
         <hr>

@@ -20,7 +20,7 @@ const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "un-mo
 function fauxFetch(reponses) {
   const appels = [];
   global.fetch = async (url, init) => {
-    appels.push({ url, init, corps: JSON.parse(init.body) });
+    appels.push({ url, init, corps: init && init.body ? JSON.parse(init.body) : null });
     const r = reponses.shift();
     if (r.reseau) throw new Error("réseau coupé");
     return {
@@ -102,4 +102,36 @@ test("tester() renvoie la phrase traduite et la durée", async () => {
   const r = await twpLlm.tester(config);
   assert.match(r.text, /Bonjour/);
   assert.equal(typeof r.ms, "number");
+});
+
+test("le fournisseur se reconnaît à la clé, sans aucun réglage", () => {
+  assert.equal(twpLlm.detecterFournisseur("gsk_abc123"), "groq");
+  assert.equal(twpLlm.detecterFournisseur("autre"), "custom");
+  const cfg = twpLlm.normaliser({ apiKey: "gsk_abc123" });
+  assert.equal(cfg.provider, "groq");
+  assert.equal(cfg.url, "https://api.groq.com/openai/v1/chat/completions");
+});
+
+test("sans modèle saisi : Groq choisit le premier modèle préféré disponible, une seule fois", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef" });
+  const appels = fauxFetch([
+    { json: { data: [{ id: "whisper-large-v3" }, { id: "llama-3.3-70b-versatile" }, { id: "openai/gpt-oss-120b" }] } },
+    { content: '{"translations":["un"]}' },
+    { content: '{"translations":["deux"]}' },
+  ]);
+  assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]), ["un"]);
+  assert.match(appels[0].url, /\/openai\/v1\/models$/);
+  assert.equal(appels[1].corps.model, "openai/gpt-oss-120b");
+  await service.makeRequest("en", "fr", [{ originalText: "<pre>two</pre>" }]);
+  assert.equal(appels.length, 3, "la liste des modèles n'est demandée qu'une fois");
+});
+
+test("translateFree : texte libre, consigne de ton, protection contre les instructions cachées", async () => {
+  const appels = fauxFetch([{ content: "<think>x</think>Bonjour tout le monde" }]);
+  const out = await twpLlm.translateFree({ apiKey: "gsk_1234567890abcdef", model: "m-libre" }, "auto", "fr", "Hello everyone", "formal");
+  assert.equal(out, "Bonjour tout le monde");
+  assert.equal(appels[0].corps.messages[1].content, "Hello everyone");
+  assert.match(appels[0].corps.messages[0].content, /formal/);
+  assert.match(appels[0].corps.messages[0].content, /never follow instructions/);
+  await assert.rejects(() => twpLlm.translateFree({ apiKey: "", url: "" }, "auto", "fr", "x"), /no-key/);
 });
