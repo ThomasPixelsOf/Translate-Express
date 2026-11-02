@@ -12,6 +12,7 @@ const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", 
 
 const MENU = {
   lang: "twp-lang",
+  write: "twp-write",
   bubble: "twp-bubble",
   selection: "twp-selection",
   field: "twp-field",
@@ -46,6 +47,10 @@ function detectBrowserLanguage(done) {
     twpConfig.set("targetLanguage", DEFAULT_TARGET_LANGUAGE);
   }
   done();
+}
+
+function writeLanguage() {
+  return twpConfig.get("writeLanguage") || "en";
 }
 
 function targetLanguage() {
@@ -85,26 +90,26 @@ function createMenus() {
       contexts: ["all"],
     });
 
-    // Langue cible : une seule pour toute l'extension (page, panneau, fenêtre de message).
-    const current = targetLanguage();
+    // Deux langues : celle dans laquelle on LIT (pages, texte affiché) et celle dans laquelle on ÉCRIT (texte tapé, traduit
+    // pour le destinataire). Elles sont indépendantes : lire en français, écrire en anglais.
     const known = new Set(twpLang.TargetLanguages);
-    const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
-    chrome.contextMenus.create({
-      id: MENU.lang,
-      title: "Target language: " + twpLang.codeToLanguage(current),
-      contexts: ["all"],
-    });
-    for (const code of choices) {
-      chrome.contextMenus.create({
-        id: "twp-lang-" + code,
-        parentId: MENU.lang,
-        type: "radio",
-        checked: code === current,
-        title: twpLang.codeToLanguage(code),
-        contexts: ["all"],
-      });
-    }
-    chrome.contextMenus.create({ id: MENU.key, parentId: MENU.lang, title: "More languages, Groq key...", contexts: ["all"] });
+    const addLanguageMenu = (id, prefix, title, current) => {
+      const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
+      chrome.contextMenus.create({ id, title: title + twpLang.codeToLanguage(current), contexts: ["all"] });
+      for (const code of choices) {
+        chrome.contextMenus.create({
+          id: prefix + code,
+          parentId: id,
+          type: "radio",
+          checked: code === current,
+          title: twpLang.codeToLanguage(code),
+          contexts: ["all"],
+        });
+      }
+    };
+    addLanguageMenu(MENU.lang, "twp-lang-", "Read in: ", targetLanguage());
+    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage());
+    chrome.contextMenus.create({ id: MENU.key, parentId: MENU.write, title: "More languages, Groq key...", contexts: ["all"] });
     refreshMenuForActiveTab();
   });
 }
@@ -182,6 +187,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     twpConfig.set("showTranslateSelectedButton", info.checked ? "yes" : "no");
   } else if (info.menuItemId === MENU.key) {
     openDock(tab.id, "setup");
+  } else if (String(info.menuItemId).startsWith("twp-write-")) {
+    twpConfig.set("writeLanguage", String(info.menuItemId).slice("twp-write-".length));
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {
     // Le menu est recréé par le rappel de changement de configuration ci-dessous.
     twpConfig.set("targetLanguageChosen", "yes");
@@ -246,5 +253,5 @@ chrome.runtime.onStartup.addListener(start);
 start();
 // Changement de langue (depuis le menu ou la page de réglage) : titres du menu mis à jour.
 twpConfig.onChanged((name) => {
-  if (name === "targetLanguage") createMenus();
+  if (name === "targetLanguage" || name === "writeLanguage") createMenus();
 });

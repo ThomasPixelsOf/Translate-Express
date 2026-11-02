@@ -74,7 +74,15 @@
     select.onchange = () => {
       twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", select.value);
-      setStatus("Language saved: " + names[select.value]);
+      setStatus("Reading language saved: " + names[select.value]);
+    };
+    // Langue d'écriture : celle dans laquelle le texte tapé est traduit pour le destinataire.
+    const write = $("#writeLanguage");
+    twpLang.fillLanguageSelect(write);
+    write.value = twpConfig.get("writeLanguage") || "en";
+    write.onchange = () => {
+      twpConfig.set("writeLanguage", write.value);
+      setStatus("Writing language saved: " + names[write.value]);
     };
   }
 

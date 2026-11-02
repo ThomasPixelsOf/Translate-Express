@@ -110,9 +110,9 @@ test("le service worker se charge sans erreur et crée le menu du clic droit", a
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
   const ids = menus.map((m) => m.id);
-  for (const id of ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-bubble", "twp-lang", "twp-key"]) assert.ok(ids.includes(id), "entrée absente : " + id);
+  for (const id of ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-bubble", "twp-lang", "twp-write", "twp-key"]) assert.ok(ids.includes(id), "entrée absente : " + id);
   assert.ok(ids.includes("twp-lang-en") && ids.includes("twp-lang-fr"), "langues courantes absentes");
-  assert.equal(menus.filter((m) => m.type === "radio" && m.checked).length, 1, "une seule langue cochée");
+  assert.equal(menus.filter((m) => m.type === "radio" && m.checked).length, 2, "une langue cochée pour lire, une pour écrire");
   assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
   assert.ok(handlers.onClicked.length >= 1);
 });
@@ -131,7 +131,7 @@ test("choisir une langue dans le menu change la langue cible partout et met le m
   chargerBg(sandbox);
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
-  assert.match(menus.find((m) => m.id === "twp-lang").title, /Target language: /);
+  assert.match(menus.find((m) => m.id === "twp-lang").title, /Read in: /);
   handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-de", frameId: 0 }, { id: 1 }));
   assert.equal(vm.runInContext('twpConfig.get("targetLanguage")', sandbox), "de");
   assert.equal(menus.find((m) => m.id === "twp-lang-de").checked, true);
@@ -404,4 +404,25 @@ test("aucun script de page n'écrit la langue cible d'office (défaut d'origine 
     const code = fs.readFileSync(path.join(dossier, f), "utf8");
     assert.ok(!/twpConfig[.]set[(]\s*["']targetLanguage["']/.test(code), f + " écrit la langue cible");
   }
+});
+
+test("deux langues : lire et écrire sont indépendantes (menu « Read in » et « Write in »)", async () => {
+  const { sandbox, menus, handlers } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  assert.match(menus.find((m) => m.id === "twp-lang").title, /^Read in: /);
+  assert.match(menus.find((m) => m.id === "twp-write").title, /^Write in: /);
+  const lire = (k) => vm.runInContext('twpConfig.get("' + k + '")', sandbox);
+  assert.equal(lire("targetLanguage"), "fr", "on lit en français par défaut");
+  assert.equal(lire("writeLanguage"), "en", "on écrit en anglais par défaut");
+
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-write-de", frameId: 0 }, { id: 1 }));
+  assert.equal(lire("writeLanguage"), "de");
+  assert.equal(lire("targetLanguage"), "fr", "choisir la langue d'écriture ne change pas la langue de lecture");
+  assert.equal(menus.find((m) => m.id === "twp-write-de").checked, true);
+
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-es", frameId: 0 }, { id: 1 }));
+  assert.equal(lire("targetLanguage"), "es");
+  assert.equal(lire("writeLanguage"), "de", "choisir la langue de lecture ne change pas la langue d'écriture");
 });

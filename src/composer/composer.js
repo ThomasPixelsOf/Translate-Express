@@ -99,7 +99,8 @@
     fillLanguages($("#target"), false);
     $("#source").value = remembered(KEY_SOURCE, "auto");
     const ui = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
-    $("#target").value = twpConfig.get("targetLanguage") || ui;
+    // La fenêtre de message sert à écrire : sa langue cible est la langue d'écriture.
+    $("#target").value = twpConfig.get("writeLanguage") || "en";
     $("#tone").value = remembered(KEY_TONE, "");
 
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
@@ -113,8 +114,7 @@
       run();
     };
     $("#target").onchange = () => {
-      twpConfig.set("targetLanguageChosen", "yes");
-      twpConfig.set("targetLanguage", $("#target").value);
+      twpConfig.set("writeLanguage", $("#target").value);
       run();
     };
     $("#tone").onchange = () => {
@@ -128,8 +128,7 @@
       $("#source").value = $("#target").value;
       $("#target").value = src;
       remember(KEY_SOURCE, $("#source").value);
-      twpConfig.set("targetLanguageChosen", "yes");
-      twpConfig.set("targetLanguage", $("#target").value);
+      twpConfig.set("writeLanguage", $("#target").value);
       $("#input").value = out;
       run();
     };

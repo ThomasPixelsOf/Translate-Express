@@ -11,6 +11,12 @@
   const DELAY_MS = 500;
 
   let field = null; // dernier champ de saisie rencontré
+  // Sélection faite dans un champ au moment où le panneau s'ouvre (elle peut disparaître quand on clique dans le panneau).
+  let savedSelectionText = "";
+  let savedSelStart = null;
+  let savedSelEnd = null;
+  let savedRange = null;
+  let lastPointer = null; // dernière position de la souris (pour placer la bulle près de la sélection d'un champ)
   let mode = null; // "selection" | "field"
   let selectionText = "";
   let host = null;
@@ -59,20 +65,40 @@
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
+  // Retourne false si la partie à remplacer n'a pas pu être retrouvée (le texte a changé entre-temps).
   function replaceInField(el, text, onlySelection) {
     el.focus();
     if (isFormField(el)) {
-      if (onlySelection && el.selectionEnd > el.selectionStart) {
-        const a = el.selectionStart;
-        setNativeValue(el, el.value.slice(0, a) + text + el.value.slice(el.selectionEnd));
-        el.setSelectionRange(a, a + text.length);
-      } else {
+      if (!onlySelection) {
         setNativeValue(el, text);
+        return true;
       }
-    } else {
-      if (!onlySelection) document.execCommand("selectAll");
-      if (!document.execCommand("insertText", false, text)) el.textContent = text;
+      let a = el.selectionStart;
+      let b = el.selectionEnd;
+      if (!(b > a)) {
+        // Sélection perdue : on la retrouve grâce aux positions mémorisées, si le texte est toujours le même.
+        if (savedSelStart !== null && el.value.slice(savedSelStart, savedSelEnd).trim() === savedSelectionText) {
+          a = savedSelStart;
+          b = savedSelEnd;
+        } else {
+          return false;
+        }
+      }
+      setNativeValue(el, el.value.slice(0, a) + text + el.value.slice(b));
+      el.setSelectionRange(a, a + text.length);
+      return true;
     }
+    if (!onlySelection) {
+      document.execCommand("selectAll");
+    } else {
+      const sel = window.getSelection();
+      if ((!sel || sel.isCollapsed) && savedRange) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+    }
+    if (!document.execCommand("insertText", false, text)) el.textContent = text;
+    return true;
   }
   function insertAtCaret(el, text) {
     el.focus();
@@ -103,6 +129,7 @@
     button.primary { background: #0f62fe; border-color: #0f62fe; color: #fff; }
     button[hidden] { display: none; }
     .out { font-size: 15px; white-space: pre-wrap; max-height: 220px; overflow: auto; border: 1px solid #c8c8d0; border-radius: 6px; padding: 8px; min-height: 52px; margin-bottom: 8px; }
+    .what { font-size: 12px; opacity: .75; white-space: nowrap; }
     .status { font-size: 11px; opacity: .7; }
     .err { color: #d93025; opacity: 1; }
     .close { margin-left: auto; border: 0; padding: 0 6px; font-size: 16px; }
@@ -115,7 +142,7 @@
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${CSS}</style>
       <div class="panel" role="dialog" aria-label="Translation">
-        <div class="row"><select class="lang" aria-label="Target language"></select><span class="status"></span><button class="close" aria-label="Close">&times;</button></div>
+        <div class="row"><span class="what"></span><select class="lang" aria-label="Target language"></select><span class="status"></span><button class="close" aria-label="Close">&times;</button></div>
         <div class="out" aria-live="polite"></div>
         <div class="row" style="margin-bottom:0">
           <button class="primary replace" hidden>Replace</button>
@@ -126,6 +153,7 @@
     ui = {
       panel: root.querySelector(".panel"),
       lang: root.querySelector(".lang"),
+      what: root.querySelector(".what"),
       out: root.querySelector(".out"),
       status: root.querySelector(".status"),
       replace: root.querySelector(".replace"),
@@ -136,7 +164,7 @@
     twpLang.fillLanguageSelect(ui.lang);
     // La langue cible est la même partout (menu, page, fenêtre de message) : celle de twpConfig.
     const ui2 = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
-    ui.lang.value = twpConfig.get("targetLanguage") || ui2;
+    ui.lang.value = currentLanguage() || ui2;
     if (!ui.lang.value) ui.lang.value = "en";
 
     // Un clic dans le panneau ne doit pas faire perdre sa sélection ou son curseur au champ de la page.
@@ -144,13 +172,20 @@
       if (e.target.tagName !== "SELECT") e.preventDefault();
     });
     ui.lang.addEventListener("change", () => {
-      twpConfig.set("targetLanguageChosen", "yes");
-      twpConfig.set("targetLanguage", ui.lang.value);
+      // Texte écrit : on change la langue d'écriture ; texte lu : la langue de lecture. Les deux sont indépendantes.
+      if (mode === "field") {
+        twpConfig.set("writeLanguage", ui.lang.value);
+      } else {
+        twpConfig.set("targetLanguageChosen", "yes");
+        twpConfig.set("targetLanguage", ui.lang.value);
+      }
       translateNow();
     });
     ui.replace.addEventListener("click", () => {
       const text = ui.out.dataset.text;
-      if (field && text) replaceInField(field, text, ui.out.dataset.scope === "selection");
+      if (!field || !text) return;
+      if (replaceInField(field, text, ui.out.dataset.scope === "selection")) show(false);
+      else setStatus("The selected text changed: select it again", true);
     });
     ui.copy.addEventListener("click", async () => {
       const text = ui.out.dataset.text || "";
@@ -177,7 +212,7 @@
   // Ce qu'il faut traduire en ce moment.
   function currentSource() {
     if (mode === "field" && field && document.contains(field)) {
-      const part = fieldSelection(field);
+      const part = fieldSelection(field) || savedSelectionText;
       return part ? { text: part, scope: "selection" } : { text: getText(field), scope: "all" };
     }
     return { text: selectionText, scope: "selection" };
@@ -186,7 +221,7 @@
   let anchorOverride = null; // emplacement du texte sélectionné au moment du clic sur la bulle
 
   function anchorRect() {
-    if (mode === "selection" && anchorOverride) return anchorOverride;
+    if (anchorOverride && (mode === "selection" || mode === "field")) return anchorOverride;
     if (mode === "field" && field && document.contains(field)) return field.getBoundingClientRect();
     const sel = window.getSelection();
     if (sel && sel.rangeCount && !sel.isCollapsed) {
@@ -211,6 +246,10 @@
     }
   }
 
+  // Texte écrit (champ de saisie) = langue d'écriture ; texte affiché (page, sélection) = langue de lecture.
+  const languageKey = () => (mode === "field" ? "writeLanguage" : "targetLanguage");
+  const currentLanguage = () => twpConfig.get(languageKey());
+
   function show(visible) {
     if (visible && !host) build();
     open = visible;
@@ -218,6 +257,8 @@
     ui.panel.style.display = visible ? "block" : "none";
     if (visible) {
       ui.replace.hidden = mode !== "field";
+      ui.what.textContent = mode === "field" ? "Write in" : "Read in";
+      ui.lang.value = currentLanguage() || ui.lang.value;
       place();
       translateNow();
     }
@@ -269,7 +310,7 @@
   }
 
   twpConfig.onChanged((name, value) => {
-    if (name === "targetLanguage" && ui && value && ui.lang.value !== value) {
+    if (name === languageKey() && ui && value && ui.lang.value !== value) {
       ui.lang.value = value;
       if (open) translateNow();
     }
@@ -372,24 +413,54 @@
     bubble = null;
   }
 
-  function selectedPlainText() {
+  // Rectangle près de la souris si elle est sur le champ (sélection faite à la souris), sinon le champ lui-même.
+  function rectNearPointer(el) {
+    const r = el.getBoundingClientRect();
+    if (lastPointer && lastPointer.x >= r.left && lastPointer.x <= r.right && lastPointer.y >= r.top && lastPointer.y <= r.bottom) {
+      return { left: lastPointer.x, right: lastPointer.x, top: lastPointer.y - 8, bottom: lastPointer.y + 8 };
+    }
+    return { left: r.left, right: r.left + 1, top: r.bottom - 20, bottom: r.bottom };
+  }
+
+  // Ce qui est sélectionné et où : { text, rect, field, start, end } ou null.
+  function readSelection() {
+    // Dans un champ de saisie (input, textarea) le navigateur n'expose pas la sélection par window.getSelection().
+    const active = editableRoot(document.activeElement);
+    if (active && isFormField(active) && isEditable(active)) {
+      const a = active.selectionStart;
+      const b = active.selectionEnd;
+      if (a == null || b == null || b <= a) return null;
+      const text = active.value.slice(a, b).trim();
+      if (text.length < BUBBLE_MIN_CHARS) return null;
+      return { text: text.slice(0, BUBBLE_MAX_CHARS), rect: rectNearPointer(active), field: active, start: a, end: b };
+    }
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const anchor = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
     // Pas dans nos propres panneaux ; pas dans un champ de mot de passe.
     if (anchor && anchor.closest && (anchor.closest("[data-twp-panel],[data-twp-dock],[data-twp-bubble]") || anchor.closest("input[type=password]"))) return null;
     const text = sel.toString().trim();
-    return text.length >= BUBBLE_MIN_CHARS ? text.slice(0, BUBBLE_MAX_CHARS) : null;
+    if (text.length < BUBBLE_MIN_CHARS) return null;
+    const range = sel.getRangeAt(0);
+    const rects = range.getClientRects();
+    const last = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+    if (!last || (!last.width && !last.height)) return null;
+    const root = anchor ? editableRoot(anchor) : null;
+    return {
+      text: text.slice(0, BUBBLE_MAX_CHARS),
+      rect: { left: last.left, right: last.right, top: last.top, bottom: last.bottom },
+      field: root && isEditable(root) ? root : null, // texte sélectionné dans un éditeur riche (Teams, Outlook web...)
+      start: null,
+      end: null,
+    };
   }
 
   function showBubble() {
     if (twpConfig.get("showTranslateSelectedButton") === "no") return hideBubble();
-    const text = selectedPlainText();
-    if (!text) return hideBubble();
-    const sel = window.getSelection();
-    const rects = sel.getRangeAt(0).getClientRects();
-    const last = rects.length ? rects[rects.length - 1] : sel.getRangeAt(0).getBoundingClientRect();
-    if (!last || (!last.width && !last.height)) return hideBubble();
+    const info = readSelection();
+    if (!info) return hideBubble();
+    const text = info.text;
+    const last = info.rect;
     if (!bubble) {
       const host = document.createElement("div");
       host.setAttribute("data-twp-bubble", "");
@@ -405,17 +476,30 @@
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {
         // Le petit panneau s'ouvre juste sous le texte sélectionné (le bouton « Window » ouvre le volet de la page).
-        const current = selectedPlainText() || bubble.text;
-        mode = "selection";
-        selectionText = current;
+        const info = readSelection() || bubble.info;
         anchorOverride = bubble.anchor || null;
+        if (info.field) {
+          // Texte écrit par l'utilisateur : on traduit la sélection et « Replace » la remplace (comme DeepL).
+          mode = "field";
+          field = info.field;
+          savedSelectionText = info.text;
+          savedSelStart = info.start;
+          savedSelEnd = info.end;
+          const sel = window.getSelection();
+          savedRange = !isFormField(info.field) && sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+        } else {
+          mode = "selection";
+          selectionText = info.text;
+          savedSelectionText = "";
+        }
         hideBubble();
         show(true);
       });
       document.documentElement.appendChild(host);
-      bubble = { host, el, timer: null, text };
+      bubble = { host, el, timer: null, text, info };
     }
     bubble.text = text;
+    bubble.info = info;
     bubble.anchor = { left: last.left, right: last.right, top: last.top, bottom: last.bottom };
     const size = 28;
     bubble.el.style.left = Math.max(4, Math.min(window.innerWidth - size - 4, last.right + 4)) + "px";
@@ -436,9 +520,10 @@
     if (!e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) hideBubble();
   }, true);
   document.addEventListener("selectionchange", () => {
-    const sel = window.getSelection();
-    if (bubble && (!sel || sel.isCollapsed)) hideBubble();
+    if (bubble && !readSelection()) hideBubble();
   });
+  // Position de la souris : la bulle se place près de la sélection faite dans un champ.
+  document.addEventListener("mouseup", (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
   window.addEventListener("scroll", () => hideBubble(), true);
 
   // ---- événements ----
@@ -495,6 +580,10 @@
       mode = request.mode;
       selectionText = request.text || "";
       anchorOverride = null;
+      savedSelectionText = "";
+      savedSelStart = null;
+      savedSelEnd = null;
+      savedRange = null;
       if (mode === "field") {
         const active = editableRoot(document.activeElement);
         if (!field || !document.contains(field)) field = isEditable(active) ? active : null;
