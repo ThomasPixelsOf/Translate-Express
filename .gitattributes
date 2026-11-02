@@ -1,0 +1,9 @@
+# Language statistics shown by GitHub (the "Languages" bar).
+
+# The table of language names comes from the original project: it is data, not code we wrote.
+src/lib/languages.js linguist-vendored
+
+# Data and documentation files are real content of this repository: count them.
+*.json linguist-detectable
+*.yml linguist-detectable
+*.md linguist-detectable
