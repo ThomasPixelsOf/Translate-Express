@@ -130,6 +130,9 @@
     .what { font-size: 12px; opacity: .75; white-space: nowrap; }
     .status { font-size: 11px; opacity: .7; }
     .err { color: #d93025; opacity: 1; }
+    .refresh { margin-left: auto; border: 0; padding: 2px 6px; display: inline-flex; align-items: center; }
+    .refresh:hover { color: #4589ff; }
+    .refresh + .close { margin-left: 0; }
     .close { margin-left: auto; border: 0; padding: 0 6px; font-size: 16px; }
   `;
 
@@ -140,7 +143,7 @@
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${CSS}</style>
       <div class="panel" role="dialog" aria-label="Translation">
-        <div class="row"><span class="what"></span><select class="lang" aria-label="Target language"></select><span class="status"></span><button class="close" aria-label="Close">&times;</button></div>
+        <div class="row"><span class="what"></span><select class="lang" aria-label="Target language"></select><span class="status"></span><button class="refresh" aria-label="Translate again" title="Translate again"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg></button><button class="close" aria-label="Close">&times;</button></div>
         <div class="out" aria-live="polite"></div>
         <div class="row" style="margin-bottom:0">
           <button class="primary replace" hidden>Replace</button>
@@ -157,6 +160,7 @@
       replace: root.querySelector(".replace"),
       copy: root.querySelector(".copy"),
       win: root.querySelector(".win"),
+      refresh: root.querySelector(".refresh"),
       close: root.querySelector(".close"),
     };
     twpLang.fillLanguageSelect(ui.lang);
@@ -198,6 +202,7 @@
     ui.win.addEventListener("click", () => {
       chrome.runtime.sendMessage({ action: "twpOpenComposer", text: currentSource().text });
     });
+    ui.refresh.addEventListener("click", () => translateNow(true));
     ui.close.addEventListener("click", () => show(false));
     document.documentElement.appendChild(host);
   }
@@ -276,7 +281,17 @@
     });
   }
 
-  async function translateNow() {
+  // Traductions déjà obtenues (langue cible + texte) : refermer puis rouvrir la bulle sur le même texte ne rappelle pas l'IA.
+  // Le bouton « Translate again » ignore cette mémoire. Les échecs ne sont jamais gardés.
+  const memory = new Map();
+  const MEMORY_MAX = 200;
+  function remember(key, value) {
+    memory.delete(key);
+    memory.set(key, value);
+    if (memory.size > MEMORY_MAX) memory.delete(memory.keys().next().value);
+  }
+
+  async function translateNow(force) {
     clearTimeout(timer);
     if (!open) return;
     const { text, scope } = currentSource();
@@ -287,8 +302,18 @@
       setStatus(mode === "field" ? "The field is empty" : "");
       return;
     }
-    setStatus("Translating...");
     const target = ui.lang.value;
+    const memoryKey = target + " " + text;
+    const kept = force === true ? undefined : memory.get(memoryKey);
+    if (kept) {
+      ui.out.textContent = kept.text;
+      ui.out.dataset.text = kept.text;
+      ui.out.dataset.scope = scope;
+      setStatus(kept.free ? "Free translator (kept)" : "AI (kept)");
+      place();
+      return;
+    }
+    setStatus("Translating...");
     let r = await ask({ action: "llmLive", text, sourceLanguage: "auto", targetLanguage: target });
     if (!r || !r.ok) {
       // Pas de clé IA, ou échec de l'IA : traducteur gratuit d'origine.
@@ -297,6 +322,7 @@
     }
     if (mine !== ticket) return;
     if (r.ok) {
+      remember(memoryKey, { text: r.text, free: !!r.free });
       ui.out.textContent = r.text;
       ui.out.dataset.text = r.text;
       ui.out.dataset.scope = scope;

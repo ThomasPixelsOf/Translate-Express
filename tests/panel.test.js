@@ -184,3 +184,29 @@ test("changer de langue sur du texte affiché change la langue de lecture, pas c
     assert.ok(!page.enregistres.some(([k]) => k === "writeLanguage"));
   } finally { page.w.close(); }
 });
+
+test("mémoire : rouvrir la bulle sur le même texte ne rappelle pas l'IA ; le bouton de rafraîchissement retraduit", { skip: ignorer }, async () => {
+  const page = creerPage();
+  try {
+    const texte = page.doc.getElementById("p").firstChild;
+    const ouvrir = async () => {
+      const r = page.doc.createRange(); r.setStart(texte, 0); r.setEnd(texte, 7);
+      page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
+      page.relacher();
+      await attendre(40);
+      page.bulle().shadowRoot.querySelector("button").click();
+      await attendre(40);
+    };
+    const appels = () => page.envoyes.filter((m) => m.action === "llmLive").length;
+    await ouvrir();
+    assert.equal(appels(), 1);
+    page.racinePanneau().querySelector(".close").click();
+    await ouvrir();
+    assert.equal(appels(), 1, "même texte, même langue : traduction gardée en mémoire");
+    assert.match(page.racinePanneau().querySelector(".out").textContent, /traduit/);
+    assert.match(page.racinePanneau().querySelector(".status").textContent, /kept/);
+    page.racinePanneau().querySelector(".refresh").click();
+    await attendre(40);
+    assert.equal(appels(), 2, "le bouton force une nouvelle traduction");
+  } finally { page.w.close(); }
+});
