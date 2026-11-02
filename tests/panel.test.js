@@ -1,12 +1,12 @@
 // Test de la bulle et du panneau (src/contentScript/panel.js) dans une page simulée (jsdom).
-// jsdom est cherché dans le dossier du projet Tenant s'il n'est pas installé ici ; sans lui, ce fichier est ignoré.
+// jsdom est cherché dans node_modules ; sans lui, ce fichier est ignoré.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
 let JSDOM = null;
-for (const chemin of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom"), "D:/Desktop/Tenant/node_modules/jsdom"]) {
+for (const chemin of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
   try { ({ JSDOM } = require(chemin)); break; } catch (e) { /* suivant */ }
 }
 const ignorer = JSDOM ? false : "jsdom introuvable";
