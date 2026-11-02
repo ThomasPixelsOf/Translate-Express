@@ -585,9 +585,14 @@ const translationService = (function () {
           (transInfo) => transInfo.waitTranlate,
         ),
       );
-      return currentTranslationsInProgress.map((transInfo) =>
-        this.cbTransformResponse(transInfo.translatedText, dontSortResults),
-      );
+      // Une requête en échec ne doit pas faire perdre les autres : son bloc est rendu vide ([]), la page le réessaiera.
+      return currentTranslationsInProgress.map((transInfo) => {
+        try {
+          return this.cbTransformResponse(transInfo.translatedText, dontSortResults);
+        } catch (e) {
+          return [];
+        }
+      });
     }
 
     /**
@@ -906,11 +911,36 @@ const translationService = (function () {
       true,
     );
     const service = getSafeServiceByName(serviceName);
+    // Les échecs précédents ne doivent pas rester en mémoire : sinon la nouvelle tentative du même texte échoue aussitôt.
+    serviceList.forEach((s) => s.removeTranslationsWithError && s.removeTranslationsWithError());
+
+    const translateWith = async (svc, blocks) => {
+      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults);
+      return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // un service sans réponse = blocs vides
+    };
+
     // Pages en plusieurs langues : les blocs déjà dans la langue cible ne sont pas retraduits (voir skipTargetLanguage.js).
     return await twpSkip.translateSkippingTarget(
       sourceArray2d,
       targetLanguage,
-      (blocks) => service.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults),
+      async (blocks) => {
+        const results = await translateWith(service, blocks);
+        if (serviceName === "llm") {
+          // Les blocs que l'IA n'a pas pu traduire sont confiés à Google, bloc par bloc (le reste n'est pas refait).
+          const failed = results.map((r, i) => (r.length === 0 && blocks[i].length > 0 ? i : -1)).filter((i) => i >= 0);
+          if (failed.length > 0) {
+            try {
+              const fallback = await translateWith(googleService, failed.map((i) => blocks[i]));
+              failed.forEach((i, k) => {
+                if (fallback[k].length > 0) results[i] = fallback[k];
+              });
+            } catch (e) {
+              console.warn("Free translator also failed:", e);
+            }
+          }
+        }
+        return results;
+      },
       twpSkip.browserDetect,
       twpLang.fixTLanguageCode,
     );

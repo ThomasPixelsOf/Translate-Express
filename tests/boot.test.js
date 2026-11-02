@@ -426,3 +426,47 @@ test("deux langues : lire et écrire sont indépendantes (menu « Read in » et 
   assert.equal(lire("targetLanguage"), "es");
   assert.equal(lire("writeLanguage"), "de", "choisir la langue de lecture ne change pas la langue d'écriture");
 });
+
+// ---- Résilience : une requête en échec ne doit ni faire échouer tout le lot, ni rester mémorisée ----
+async function demarrerAvecIa(fetchIa) {
+  const { sandbox, handlers } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  vm.runInContext("translationCache.get = async () => null; translationCache.set = async () => {};", sandbox);
+  vm.runInContext("twpConfig.set('customServices', [" + JSON.stringify(cleLlm) + "]); twpConfig.set('pageTranslatorService', 'llm');", sandbox);
+  sandbox.fetch = async (url, init) => {
+    if (String(url).endsWith("/models")) return { ok: true, status: 200, json: async () => ({ data: [{ id: "llama-3.3-70b-versatile" }] }) };
+    if (String(url).includes("chat/completions")) return fetchIa(JSON.parse(init.body));
+    throw new Error("réseau coupé : " + url); // Google est injoignable dans ces tests
+  };
+  await envoyer(handlers, { action: "createLlmService", llm: cleLlm });
+  return { sandbox, handlers };
+}
+const reponseIa = (traductions) => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ choices: [{ message: { content: JSON.stringify({ translations: traductions }) } }] }) });
+const limite = () => ({ ok: false, status: 429, headers: { get: (n) => (n === "retry-after" ? "45" : null) }, json: async () => ({}) });
+const traduire = (handlers, blocs) => envoyer(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: blocs, dontSortResults: false });
+
+test("résilience : un échec de l'IA n'est pas mémorisé, la nouvelle tentative du même texte réussit", async () => {
+  let appels = 0;
+  const { handlers } = await demarrerAvecIa(() => (++appels === 1 ? limite() : reponseIa(["<pre>Bonjour le monde</pre>"])));
+  const premier = await traduire(handlers, [["Hello world"]]);
+  assert.ok(premier === "REPONSE VIDE" || (Array.isArray(premier) && premier[0].length === 0), "premier essai : échec (IA limitée, Google coupé)");
+  const second = await traduire(handlers, [["Hello world"]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(second)), [["Bonjour le monde"]], "second essai : traduit (l'échec n'est pas resté en mémoire)");
+});
+
+test("résilience : une requête en échec ne fait pas perdre les autres blocs de la page", async () => {
+  // deux gros blocs : deux requêtes distinctes ; la seconde est refusée (limite de débit)
+  const gros = (mot) => [mot + " " + "x".repeat(1200)];
+  let appels = 0;
+  const { handlers } = await demarrerAvecIa((corps) => {
+    appels++;
+    const textes = JSON.parse(corps.messages[1].content);
+    return /^<pre>A /.test(textes[0]) ? reponseIa(textes.map((s) => s.replace("A ", "TRADUIT-A "))) : limite();
+  });
+  const reponse = await traduire(handlers, [gros("A"), gros("B")]);
+  assert.ok(Array.isArray(reponse), "la réponse n'est pas perdue : " + reponse);
+  const r = JSON.parse(JSON.stringify(reponse));
+  assert.match(r[0][0], /^TRADUIT-A /, "le bloc dont la requête a réussi est traduit");
+  assert.deepEqual(r[1], [], "le bloc en échec est rendu vide (la page le réessaiera), sans faire échouer le reste");
+});

@@ -861,7 +861,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   }
 
   // Nombre de nouvelles tentatives d'un morceau dont la traduction a échoué (réponse absente ou vide).
-  const MAX_PIECE_RETRIES = 3;
+  const MAX_PIECE_RETRIES = 6; // délais : 2 s, 4 s, 8 s, 16 s, 30 s, 30 s (couvre une limite de débit d'une trentaine de secondes)
 
   // Le code d'origine marquait un morceau « traduit » avant d'envoyer la demande : si la réponse échouait, le morceau
   // restait en version originale pour toujours (une partie de la page traduite, le reste non). Maintenant un morceau
@@ -874,13 +874,14 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       ptt.retries = (ptt.retries || 0) + 1;
       if (ptt.retries <= MAX_PIECE_RETRIES) {
         ptt.isTranslated = false;
-        ptt.retryAt = Date.now() + 1500 * ptt.retries;
+        ptt.retryAt = Date.now() + Math.min(30000, 2000 * 2 ** (ptt.retries - 1));
       }
     });
   }
 
   function translateResults(piecesToTranslateNow, results) {
     if (!Array.isArray(results)) return;
+    results = results.map((r) => (Array.isArray(r) ? r : [])); // morceau sans réponse : ignoré, réessayé plus tard
     if (dontSortResults) {
       for (let i = 0; i < results.length; i++) {
         for (let j = 0; j < results[i].length; j++) {

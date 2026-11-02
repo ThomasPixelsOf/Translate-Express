@@ -26,13 +26,17 @@ TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté I
 
 L'état « page traduite ou non » est propre à chaque onglet : le titre de l'entrée du menu (« Translate this page to … » ou « Show original page ») est recalculé quand on change d'onglet ou de fenêtre, et un clic agit selon l'état de l'onglet cliqué. Une page qui se recharge redevient « à traduire ». L'état n'est jamais mémorisé dans le service worker : on le demande à l'onglet.
 
+## Résilience : une partie en échec ne bloque pas le reste
+
+Côté moteur (`translationService.js`) : une requête qui échoue ne fait plus échouer tout le lot (son bloc est rendu vide, les autres sont gardés) ; un échec n'est plus mémorisé (avant, la nouvelle tentative du même texte échouait aussitôt) ; les blocs que l'IA n'a pas pu traduire sont confiés à Google bloc par bloc. Côté page (`pageTranslator.js`) : un morceau sans réponse est réessayé jusqu'à 6 fois (2 s, 4 s, 8 s, 16 s, 30 s, 30 s). `tests/boot.test.js` contient deux tests de ce scénario qui échouaient sur le code précédent.
+
 ## Texte lu et texte écrit : deux langues
 
 Le texte **affiché** (page, texte sélectionné sur la page) est traduit dans la langue de **lecture** (français par défaut, « Read in »). Le texte **écrit** par l'utilisateur dans un champ (input, zone de texte, éditeur de Teams ou d'Outlook web) est traduit dans la langue d'**écriture** (anglais par défaut, « Write in »), celle du destinataire. Elles sont indépendantes : changer l'une ne touche pas l'autre. Le panneau l'indique (« Read in » ou « Write in »). Pour du texte écrit sélectionné, la bulle apparaît aussi, comme chez DeepL : un clic ouvre le panneau avec la traduction de la sélection dans la langue d'écriture, et « Replace » remplace uniquement la partie sélectionnée, puis le panneau se ferme. La fenêtre de message (écrire et voir la traduction en direct) utilise la langue d'écriture.
 
 ## Page entièrement traduite (défauts d'origine corrigés)
 
-Le traducteur d'origine laissait des parties de page en version originale pour deux raisons, corrigées dans `pageTranslator.js` : (1) un morceau était marqué « traduit » avant l'envoi ; si la réponse échouait ou revenait vide, il n'était jamais réessayé — il l'est maintenant, jusqu'à 3 fois avec un délai croissant ; (2) un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé — tout morceau dont une partie est dans la zone visible l'est maintenant. Le texte est aussi traduit trois quarts d'écran à l'avance sous la zone visible, pour être déjà prêt quand on défile. `tests/page-translation.test.js` simule une page (jsdom) : ces tests échouent sur l'ancien code et réussissent sur le nouveau.
+Le traducteur d'origine laissait des parties de page en version originale pour deux raisons, corrigées dans `pageTranslator.js` : (1) un morceau était marqué « traduit » avant l'envoi ; si la réponse échouait ou revenait vide, il n'était jamais réessayé — il l'est maintenant, jusqu'à 6 fois avec un délai croissant (2 s à 30 s) ; (2) un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé — tout morceau dont une partie est dans la zone visible l'est maintenant. Le texte est aussi traduit trois quarts d'écran à l'avance sous la zone visible, pour être déjà prêt quand on défile. `tests/page-translation.test.js` simule une page (jsdom) : ces tests échouent sur l'ancien code et réussissent sur le nouveau.
 
 ## Pages en plusieurs langues
 
