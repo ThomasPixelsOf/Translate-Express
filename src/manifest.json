@@ -37,6 +37,12 @@
     "hotkey-translate-page-3": {
       "description": "__MSG_lblTranslatePageToTargetLanguage__ 3"
     },
+    "hotkey-open-composer": {
+      "suggested_key": {
+        "default": "Alt+M"
+      },
+      "description": "Open the message window (live translation)"
+    },
     "hotkey-hot-translate-selected-text": {
       "description": "__MSG_lblHotTranslatedSelectedText__"
     }
@@ -111,7 +117,8 @@
         "/contentScript/showOriginal.js",
         "/contentScript/pageTranslator.js",
         "/contentScript/translateSelected.js",
-        "/contentScript/showTranslated.js"
+        "/contentScript/showTranslated.js",
+        "/contentScript/fieldTranslator.js"
       ]
     },
     {

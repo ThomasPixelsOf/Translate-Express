@@ -959,9 +959,36 @@ twpConfig.onReady(() => {
   }
 });
 
+// Fenêtre de message (traduction en direct) : une seule fenêtre ; si elle existe déjà on la remet devant.
+async function openComposer(tabId, draft) {
+  const url = chrome.runtime.getURL("/composer/composer.html");
+  if (draft) await chrome.storage.local.set({ composerDraft: draft });
+  const windows = await chrome.windows.getAll({ populate: true });
+  const existing = windows.find((w) => w.type === "popup" && w.tabs && w.tabs.some((t) => t.url && t.url.startsWith(url)));
+  if (existing) {
+    await chrome.windows.update(existing.id, { focused: true });
+    if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
+    return;
+  }
+  await chrome.windows.create({
+    url: url + (tabId ? "?tab=" + tabId : ""),
+    type: "popup",
+    width: 900,
+    height: 520,
+  });
+}
+
+chrome.runtime.onMessage.addListener((request, sender) => {
+  if (request.action === "twpOpenComposer") {
+    openComposer(sender.tab ? sender.tab.id : null, request.text);
+  }
+});
+
 if (typeof chrome.commands !== "undefined") {
   chrome.commands.onCommand.addListener((command) => {
-    if (command === "hotkey-toggle-translation") {
+    if (command === "hotkey-open-composer") {
+      chrome.tabs.query({ currentWindow: true, active: true }, (tabs) => openComposer(tabs[0] ? tabs[0].id : null));
+    } else if (command === "hotkey-toggle-translation") {
       chrome.tabs.query(
         {
           currentWindow: true,

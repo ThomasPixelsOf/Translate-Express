@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>TWP - Message</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="composer.css" />
+</head>
+
+<body>
+  <header>
+    <select id="source" aria-label="Source language"></select>
+    <button id="swap" title="Swap languages and texts" aria-label="Swap">&#8644;</button>
+    <select id="target" aria-label="Target language"></select>
+    <select id="tone" aria-label="Tone" hidden>
+      <option value="">Same tone</option>
+      <option value="formal">Formal</option>
+      <option value="informal">Informal</option>
+    </select>
+    <span id="status" aria-live="polite"></span>
+  </header>
+
+  <main>
+    <section>
+      <textarea id="input" placeholder="Type or paste your message..." autofocus spellcheck="false"></textarea>
+    </section>
+    <section>
+      <textarea id="output" readonly placeholder="The translation appears here as you type."></textarea>
+    </section>
+  </main>
+
+  <footer>
+    <button id="copy" class="primary">Copy translation</button>
+    <button id="insert" hidden>Insert in the page</button>
+    <button id="clear">Clear</button>
+    <span id="hint" hidden>
+      For better quality, <a href="/options/options.html#experimental" target="_blank">add a Groq key</a> (one paste, no other setting).
+    </span>
+  </footer>
+
+  <script src="/lib/polyfill.js"></script>
+  <script src="/lib/checkedLastError.js"></script>
+  <script src="/lib/stuff.js"></script>
+  <script src="/lib/languages.js"></script>
+  <script src="/lib/config.js"></script>
+  <script src="/lib/platformInfo.js"></script>
+  <script src="/lib/i18n.js"></script>
+  <script src="composer.js"></script>
+</body>
+
+</html>
