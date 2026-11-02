@@ -20,7 +20,15 @@ const MENU = {
   key: "twp-key",
 };
 
-let pageLanguageState = "original";
+// L'état « page traduite ou non » appartient à chaque onglet : on le demande à l'onglet concerné (jamais mémorisé ici,
+// sinon un onglet afficherait l'état de l'onglet précédent).
+function getTabPageState(tabId, callback) {
+  if (!tabId) return callback("original");
+  chrome.tabs.sendMessage(tabId, { action: "getCurrentPageLanguageState" }, { frameId: 0 }, (state) => {
+    void chrome.runtime.lastError;
+    callback(state === "translated" ? "translated" : "original");
+  });
+}
 
 // Langue par défaut, tant que l'utilisateur n'a pas choisi : sa langue à lui, pas forcément celle de l'interface.
 // Beaucoup de navigateurs ont l'anglais en tête (interface et langues préférées « en,fr ») alors que la personne lit
@@ -51,8 +59,8 @@ function pageService() {
   return llm && llm.apiKey ? "llm" : "google";
 }
 
-function pageMenuTitle() {
-  return pageLanguageState === "translated"
+function pageMenuTitle(state = "original") {
+  return state === "translated"
     ? "Show original page"
     : "Translate this page to " + twpLang.codeToLanguage(targetLanguage());
 }
@@ -98,11 +106,24 @@ function createMenus() {
       });
     }
     chrome.contextMenus.create({ id: MENU.key, parentId: MENU.lang, title: "More languages, Groq key...", contexts: ["all"] });
+    refreshMenuForActiveTab();
   });
 }
 
-function updatePageMenuTitle() {
-  chrome.contextMenus.update(MENU.page, { title: pageMenuTitle() }, checkedLastError);
+function updatePageMenuTitle(state) {
+  chrome.contextMenus.update(MENU.page, { title: pageMenuTitle(state) }, checkedLastError);
+}
+
+// Titre de l'entrée « page » = état de l'onglet affiché.
+function refreshMenuForTab(tabId) {
+  getTabPageState(tabId, updatePageMenuTitle);
+}
+function refreshMenuForActiveTab(windowId) {
+  const query = windowId === undefined ? { active: true, currentWindow: true } : { active: true, windowId };
+  chrome.tabs.query(query, (tabs) => {
+    void chrome.runtime.lastError;
+    if (tabs && tabs[0]) refreshMenuForTab(tabs[0].id);
+  });
 }
 
 // Fenêtre de message (traduction en direct) : une seule fenêtre ; si elle existe déjà on la remet devant.
@@ -149,11 +170,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     chrome.tabs.sendMessage(tab.id, { action: "twpPanel", mode: "field" }, frame, checkedLastError);
   } else if (info.menuItemId === MENU.page) {
     // La page entière (tous ses cadres) : traduire ou revenir à l'original selon l'état courant.
-    chrome.tabs.sendMessage(
-      tab.id,
-      pageLanguageState === "translated" ? { action: "restorePage" } : { action: "translatePage", targetLanguage: targetLanguage(), service: pageService() },
-      checkedLastError
-    );
+    getTabPageState(tab.id, (state) => {
+      chrome.tabs.sendMessage(
+        tab.id,
+        state === "translated" ? { action: "restorePage" } : { action: "translatePage", targetLanguage: targetLanguage(), service: pageService() },
+        checkedLastError
+      );
+    });
   } else if (info.menuItemId === MENU.composer) {
     openDock(tab.id, "composer");
   } else if (info.menuItemId === MENU.bubble) {
@@ -182,8 +205,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   } else if (request.action === "setPageLanguageState") {
-    pageLanguageState = request.pageLanguageState;
-    updatePageMenuTitle();
+    if (sender.tab && sender.tab.active && (sender.frameId === 0 || sender.frameId === undefined)) {
+      updatePageMenuTitle(request.pageLanguageState === "translated" ? "translated" : "original");
+    }
   } else if (request.action === "detectTabLanguage") {
     if (!sender.tab) {
       sendResponse("und");
@@ -205,6 +229,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.view === "setup") openKeyPage();
     else openComposer(sender.tab ? sender.tab.id : null);
   }
+});
+
+chrome.tabs.onActivated.addListener((info) => refreshMenuForTab(info.tabId));
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) refreshMenuForActiveTab(windowId);
+});
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!tab || !tab.active) return;
+  if (changeInfo.status === "loading") updatePageMenuTitle("original"); // une page qui se recharge n'est plus traduite
+  else if (changeInfo.status === "complete") refreshMenuForTab(tabId);
 });
 
 const start = () => twpConfig.onReady(() => detectBrowserLanguage(createMenus));

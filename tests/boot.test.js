@@ -13,7 +13,7 @@ function fauxChrome() {
   const menus = [];
   const handlers = { onMessage: [], onClicked: [], onInstalled: [], onStartup: [] };
   const stockage = {};
-  const etat = { dockAnswer: true, tabMessages: [], windowsCreated: [] };
+  const etat = { dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [] } };
   const chrome = {
     runtime: {
       onMessage: { addListener: (f) => handlers.onMessage.push(f) },
@@ -38,8 +38,20 @@ function fauxChrome() {
       update: (id, p, cb) => { const m = menus.find((x) => x.id === id); if (m) Object.assign(m, p); cb && cb(); },
       onClicked: { addListener: (f) => handlers.onClicked.push(f) },
     },
-    tabs: { sendMessage: (id, msg, opts, cb) => { etat.tabMessages.push({ id, msg }); const f = typeof opts === "function" ? opts : cb; if (f) f(etat.dockAnswer); }, detectLanguage: (id, cb) => cb("en"), query: (q, cb) => cb([]) },
-    windows: { create: (o) => { etat.windowsCreated.push(o); return Promise.resolve(); }, getAll: () => Promise.resolve([]), update: () => Promise.resolve() },
+    tabs: {
+      sendMessage: (id, msg, opts, cb) => {
+        etat.tabMessages.push({ id, msg });
+        const f = typeof opts === "function" ? opts : cb;
+        // Chaque onglet répond avec SON état de traduction.
+        if (msg.action === "getCurrentPageLanguageState") return f && f(etat.pageStates[id] || "original");
+        if (f) f(etat.dockAnswer);
+      },
+      detectLanguage: (id, cb) => cb("en"),
+      query: (q, cb) => cb([{ id: etat.activeTab, active: true }]),
+      onActivated: { addListener: (f) => etat.listeners.onActivated.push(f) },
+      onUpdated: { addListener: (f) => etat.listeners.onUpdated.push(f) },
+    },
+    windows: { WINDOW_ID_NONE: -1, onFocusChanged: { addListener: (f) => etat.listeners.onFocusChanged.push(f) }, create: (o) => { etat.windowsCreated.push(o); return Promise.resolve(); }, getAll: () => Promise.resolve([]), update: () => Promise.resolve() },
   };
   return { chrome, menus, handlers, stockage, etat };
 }
@@ -108,7 +120,7 @@ test("le menu bascule sur « Show original page » quand la page est traduite", 
   chargerBg(sandbox);
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
-  handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 1 } }, () => {}));
+  handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 1, active: true }, frameId: 0 }, () => {}));
   assert.equal(menus.find((m) => m.id === "twp-page").title, "Show original page");
 });
 
@@ -269,4 +281,49 @@ test("choisir une langue dans le menu l'enregistre comme choix de l'utilisateur"
   handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-ja", frameId: 0 }, { id: 1 }));
   assert.equal(vm.runInContext('twpConfig.get("targetLanguageChosen")', sandbox), "yes");
   assert.equal(langueCible(sandbox), "ja");
+});
+
+test("multi-onglets : le menu suit l'onglet affiché, pas l'onglet précédent", async () => {
+  const { sandbox, menus, handlers, etat } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const titre = () => menus.find((m) => m.id === "twp-page").title;
+  etat.pageStates = { 1: "translated", 2: "original" };
+
+  etat.listeners.onActivated.forEach((f) => f({ tabId: 1 })); // onglet 1 : traduit
+  assert.equal(titre(), "Show original page");
+  etat.listeners.onActivated.forEach((f) => f({ tabId: 2 })); // onglet 2 : jamais traduit
+  assert.match(titre(), /^Translate this page to /, "l'onglet 2 ne doit pas hériter de l'état de l'onglet 1");
+  etat.listeners.onActivated.forEach((f) => f({ tabId: 1 }));
+  assert.equal(titre(), "Show original page");
+});
+
+test("multi-onglets : le clic agit selon l'état de l'onglet cliqué", async () => {
+  const { sandbox, handlers, etat } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  etat.pageStates = { 1: "translated", 2: "original" };
+  const cliquer = (id) => handlers.onClicked.forEach((f) => f({ menuItemId: "twp-page", frameId: 0 }, { id }));
+  cliquer(2);
+  assert.equal(etat.tabMessages.at(-1).msg.action, "translatePage", "onglet 2 non traduit : on traduit");
+  cliquer(1);
+  assert.equal(etat.tabMessages.at(-1).msg.action, "restorePage", "onglet 1 traduit : on revient à l'original");
+});
+
+test("multi-onglets : un message d'un onglet en arrière-plan ne change pas le titre, une page rechargée redevient « à traduire »", async () => {
+  const { sandbox, menus, handlers, etat } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const titre = () => menus.find((m) => m.id === "twp-page").title;
+  handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 9, active: false }, frameId: 0 }, () => {}));
+  assert.match(titre(), /^Translate this page to /, "onglet non affiché : titre inchangé");
+  handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 1, active: true }, frameId: 3 }, () => {}));
+  assert.match(titre(), /^Translate this page to /, "sous-cadre : ignoré");
+  handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 1, active: true }, frameId: 0 }, () => {}));
+  assert.equal(titre(), "Show original page");
+  etat.listeners.onUpdated.forEach((f) => f(1, { status: "loading" }, { id: 1, active: true })); // la page se recharge
+  assert.match(titre(), /^Translate this page to /);
 });
