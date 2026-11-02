@@ -35,6 +35,13 @@ function getTabPageState(tabId, callback) {
 const DEFAULT_TARGET_LANGUAGE = "fr";
 
 function detectBrowserLanguage(done) {
+  // Réparation unique : un ancien défaut remettait la langue en anglais à chaque page, donc la langue enregistrée n'est pas
+  // fiable. On repart du français ; un choix fait ensuite par l'utilisateur est, lui, gardé.
+  if (twpConfig.get("targetLanguageFixed") !== "yes") {
+    twpConfig.set("targetLanguageChosen", "no");
+    twpConfig.set("targetLanguage", DEFAULT_TARGET_LANGUAGE);
+    twpConfig.set("targetLanguageFixed", "yes");
+  }
   if (twpConfig.get("targetLanguageChosen") !== "yes" && twpConfig.get("targetLanguage") !== DEFAULT_TARGET_LANGUAGE) {
     twpConfig.set("targetLanguage", DEFAULT_TARGET_LANGUAGE);
   }

@@ -379,13 +379,8 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   });
 
-  //TODO FOO
-  if (
-    twpConfig.get("useOldPopup") == "yes" ||
-    twpConfig.get("popupPanelSection") <= 1
-  ) {
-    twpConfig.set("targetLanguage", twpConfig.get("targetLanguages")[0]);
-  }
+  // (Retiré : le code d'origine remettait ici la langue cible sur la première langue du navigateur à CHAQUE chargement de
+  // page, ce qui annulait le choix de l'utilisateur. La langue cible n'est modifiée que par l'utilisateur.)
 
   // Pieces are a set of nodes separated by inline tags that form a sentence or paragraph.
   let piecesToTranslate = [];

@@ -256,6 +256,7 @@ test("une langue choisie par l'utilisateur n'est plus jamais remplacée par la d
   const { sandbox } = await demarrerAvecLangues("fr", ["fr"], ({ stockage }) => {
     stockage.targetLanguage = "ja"; // hors des trois premières langues du navigateur
     stockage.targetLanguageChosen = "yes";
+    stockage.targetLanguageFixed = "yes";
   });
   assert.equal(langueCible(sandbox), "ja");
 });
@@ -384,4 +385,23 @@ test("rechargement de l'extension : la langue choisie est gardée, et sans choix
   // 3) autre utilisateur qui n'a rien choisi, avec un vieux défaut « en » enregistré : retour au français
   const session3 = await demarrerAvecLangues("en", ["en"], ({ stockage }) => { stockage.targetLanguage = "en"; });
   assert.equal(langueCible(session3.sandbox), "fr");
+});
+
+test("réparation unique : l'état abîmé par l'ancien défaut (anglais « choisi ») est remis au français, une seule fois", async () => {
+  const etatAbime = ({ stockage }) => { stockage.targetLanguage = "en"; stockage.targetLanguageChosen = "yes"; };
+  const s1 = await demarrerAvecLangues("en", ["en", "fr"], etatAbime);
+  assert.equal(langueCible(s1.sandbox), "fr", "remis au français");
+  // l'utilisateur choisit ensuite l'allemand : ce choix est gardé aux démarrages suivants
+  s1.handlers.onInstalled.forEach((f) => f());
+  s1.handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-de", frameId: 0 }, { id: 1 }));
+  const s2 = await demarrerAvecLangues("en", ["en", "fr"], ({ stockage }) => Object.assign(stockage, s1.stockage));
+  assert.equal(langueCible(s2.sandbox), "de", "la réparation ne se rejoue pas");
+});
+
+test("aucun script de page n'écrit la langue cible d'office (défaut d'origine qui la remettait en anglais à chaque page)", () => {
+  const dossier = path.join(SRC, "contentScript");
+  for (const f of fs.readdirSync(dossier).filter((n) => n.endsWith(".js") && n !== "panel.js")) {
+    const code = fs.readFileSync(path.join(dossier, f), "utf8");
+    assert.ok(!/twpConfig[.]set[(]\s*["']targetLanguage["']/.test(code), f + " écrit la langue cible");
+  }
 });
