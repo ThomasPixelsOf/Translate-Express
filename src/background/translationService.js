@@ -164,7 +164,6 @@ const translationService = (function () {
    * Takes a string formatted with the translated text and returns a `resultArray`.
    * @callback callback_cbTransformResponse
    * @param {String} result
-   * @param {boolean} dontSortResults
    * @returns {string[]} resultArray
    */
 
@@ -377,18 +376,15 @@ const translationService = (function () {
     /**
      * Translates the `sourceArray2d`.
      *
-     * The `dontSortResults` parameter is only valid when using the ***google*** translation service, if its value is **true** then the translation result will not be sorted.
      * @param {string} sourceLanguage
      * @param {string} targetLanguage
      * @param {Array<string[]>} sourceArray2d
-     * @param {boolean} dontSortResults
      * @returns {Promise<string[][]>}
      */
     async translate(
       sourceLanguage,
       targetLanguage,
       sourceArray2d,
-      dontSortResults = false,
       options = {},
     ) {
       const [requests, currentTranslationsInProgress] = await this.getRequests(
@@ -406,7 +402,7 @@ const translationService = (function () {
               const results = this.cbParseResponse(response);
               for (const idx in request) {
                 const result = results[idx];
-                this.cbTransformResponse(result.text, dontSortResults); // only to generate an error
+                this.cbTransformResponse(result.text); // only to generate an error
                 const transInfo = request[idx];
                 transInfo.detectedLanguage = result.detectedLanguage || "und";
                 transInfo.translatedText = result.text;
@@ -430,7 +426,7 @@ const translationService = (function () {
       // A failed request must not make the others lost: its block is returned empty ([]), the page will retry it.
       return currentTranslationsInProgress.map((transInfo) => {
         try {
-          return this.cbTransformResponse(transInfo.translatedText, dontSortResults);
+          return this.cbTransformResponse(transInfo.translatedText);
         } catch (e) {
           return [];
         }
@@ -495,7 +491,7 @@ const translationService = (function () {
           );
           return responseJson;
         },
-        function cbTransformResponse(result, dontSortResults) {
+        function cbTransformResponse(result) {
           // remove the <pre> tag from the response
           if (result.indexOf("<pre") !== -1) {
             result = result.replace("</pre>", "");
@@ -600,43 +596,21 @@ const translationService = (function () {
           // unescapeHTML
           resultArray = resultArray.map((value) => Utils.unescapeHTML(value));
 
-          if (dontSortResults) {
-            // Should not sort the <a i={number}> of Google Translate result
-            // Instead of it, join the texts without sorting
-            // https://github.com/FilipePS/Traduzir-paginas-web/issues/163
+          // Sort Google translate results to keep the links with the correct name
+          // Note: the links may also disappear; http://web.archive.org/web/20220919162911/https://de.wikipedia.org/wiki/Wikipedia:Hauptseite
 
-            // /** @type {string[]} */
-            // const finalResulArray = [];
+          /** @type {string[]} */
+          const finalResulArray = [];
 
-            // for (const j in indexes) {
-            //   finalResulArray[indexes[j]] = "";
-            // }
-
-            // resultArray.forEach((text, i) => {
-            //   finalResulArray[
-            //     Math.floor(i * (finalResulArray.length / resultArray.length))
-            //   ] += text;
-            // });
-
-            // return finalResulArray;
-            return resultArray;
-          } else {
-            // Sort Google translate results to keep the links with the correct name
-            // Note: the links may also disappear; http://web.archive.org/web/20220919162911/https://de.wikipedia.org/wiki/Wikipedia:Hauptseite
-
-            /** @type {string[]} */
-            const finalResulArray = [];
-
-            for (const j in indexes) {
-              if (finalResulArray[indexes[j]]) {
-                finalResulArray[indexes[j]] += " " + resultArray[j];
-              } else {
-                finalResulArray[indexes[j]] = resultArray[j];
-              }
+          for (const j in indexes) {
+            if (finalResulArray[indexes[j]]) {
+              finalResulArray[indexes[j]] += " " + resultArray[j];
+            } else {
+              finalResulArray[indexes[j]] = resultArray[j];
             }
-
-            return finalResulArray;
           }
+
+          return finalResulArray;
         },
         function cbGetExtraParameters(
           sourceLanguage,
@@ -672,13 +646,11 @@ const translationService = (function () {
 
     /**
      * @param {string[][]} sourceArray2d - Only the string `sourceArray2d[0][0]` will be translated.
-     * @param {boolean} dontSortResults - Whether the translation result should be sorted according to ID <a i=ID>.
      */
     async translate(
       sourceLanguage,
       targetLanguage,
       sourceArray2d,
-      dontSortResults = false,
       options = {},
     ) {
       /** @type {{search: string, replace: string}[]} */
@@ -708,7 +680,6 @@ const translationService = (function () {
         sourceLanguage,
         targetLanguage,
         sourceArray2d,
-        dontSortResults,
         options,
       );
     }
@@ -744,7 +715,6 @@ const translationService = (function () {
     sourceLanguage,
     targetLanguage,
     sourceArray2d,
-    dontSortResults = false,
     priority = "high",
   ) => {
     serviceName = twpLang.getAlternativeService(
@@ -759,7 +729,7 @@ const translationService = (function () {
     const tDebut = Date.now();
     const stats = { sent: 0, failed: 0, fallbackOk: 0 };
     const translateWith = async (svc, blocks) => {
-      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSortResults, { priority });
+      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, { priority });
       return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // a service without an answer = empty blocks
     };
 
@@ -859,7 +829,6 @@ const translationService = (function () {
           request.sourceLanguage,
           request.targetLanguage,
           request.sourceArray2d,
-          request.dontSortResults,
           request.priority,
         )
         // Fallback: if the AI fails (key refused, rate limit, outage), the page is translated by Google rather than left empty.
@@ -871,7 +840,6 @@ const translationService = (function () {
             request.sourceLanguage,
             request.targetLanguage,
             request.sourceArray2d,
-            request.dontSortResults,
             request.priority,
           );
         })

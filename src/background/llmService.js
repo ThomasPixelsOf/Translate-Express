@@ -411,7 +411,7 @@ var twpLlm = (function () {
   }
 
   // Splits the answer `<pre><a i=0>…</a><a i=1>…</a></pre>` into an array of texts, as the Google service does.
-  function splitAnswer(text, dontSortResults, unescapeHTML) {
+  function splitAnswer(text, unescapeHTML) {
     // A failed request gives `null`: that is an error (the calling service falls back to Google), not the text "null".
     if (typeof text !== "string") throw new Error("translation failed");
     let t = text;
@@ -424,7 +424,7 @@ var twpLlm = (function () {
     let m;
     while ((m = re.exec(t)) !== null) parts.push({ i: Number(m[1]), t: m[2] });
     if (parts.length === 0) return [unescapeHTML(t)];
-    if (!dontSortResults) parts.sort((a, b) => a.i - b.i);
+    parts.sort((a, b) => a.i - b.i);
     return parts.map((x) => unescapeHTML(x.t));
   }
 
@@ -452,8 +452,8 @@ var twpLlm = (function () {
           function cbParseResponse(response) {
             return response.map((text) => ({ text, detectedLanguage: null }));
           },
-          function cbTransformResponse(result, dontSortResults) {
-            return splitAnswer(result, dontSortResults, Utils.unescapeHTML);
+          function cbTransformResponse(result) {
+            return splitAnswer(result, Utils.unescapeHTML);
           },
           null,
           null,

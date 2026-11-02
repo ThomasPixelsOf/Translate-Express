@@ -48,10 +48,9 @@ test("extractArray accepts an object, an array, a code block and the model's thi
 
 test("splitAnswer finds the <a i=N> pieces, puts them back in order and removes the HTML escaping", () => {
   const { splitAnswer } = twpLlm._test;
-  const output = splitAnswer("<pre><a i=1>B &amp; b</a><a i=0>A</a></pre>", false, Utils.unescapeHTML);
+  const output = splitAnswer("<pre><a i=1>B &amp; b</a><a i=0>A</a></pre>", Utils.unescapeHTML);
   assert.deepEqual(output, ["A", "B & b"]);
-  assert.deepEqual(splitAnswer("<pre><a i=1>B</a><a i=0>A</a></pre>", true, Utils.unescapeHTML), ["B", "A"]);
-  assert.deepEqual(splitAnswer("<pre>Bonjour</pre>", false, Utils.unescapeHTML), ["Bonjour"]);
+  assert.deepEqual(splitAnswer("<pre>Bonjour</pre>", Utils.unescapeHTML), ["Bonjour"]);
 });
 
 test("the service translates a batch in a single request and sends the key only to the provider's address", async () => {
@@ -141,8 +140,8 @@ test("translateFree: free text, tone instruction, protection against hidden inst
 
 test("a missing answer (failed request) is an error, never the text \"null\"", () => {
   const { splitAnswer } = twpLlm._test;
-  assert.throws(() => splitAnswer(null, false, Utils.unescapeHTML), /translation failed/);
-  assert.throws(() => splitAnswer(undefined, false, Utils.unescapeHTML), /translation failed/);
+  assert.throws(() => splitAnswer(null, Utils.unescapeHTML), /translation failed/);
+  assert.throws(() => splitAnswer(undefined, Utils.unescapeHTML), /translation failed/);
 });
 
 test("a reasoning model gets the setting that turns off thinking; refused (400), it retries without and remembers it", async () => {

@@ -291,7 +291,7 @@ test("if the AI fails, the page is translated by Google instead of staying empty
   };
   vm.runInContext("twpConfig.set('customServices', [" + JSON.stringify(llmKey) + "])", sandbox);
   await send(handlers, { action: "createLlmService", llm: llmKey });
-  await send(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: [["Hello"]], dontSortResults: false });
+  await send(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: [["Hello"]] });
   assert.ok(urls.some((u) => u.includes("chat/completions")), "the AI was tried first");
   assert.ok(urls.some((u) => /translate(-pa)?.googleapis.com/.test(u)), "then Google was tried: " + urls.join(" | "));
 });
@@ -499,7 +499,7 @@ async function bootWithAi(fetchIa) {
 }
 const aiAnswer = (translations) => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ choices: [{ message: { content: JSON.stringify({ translations: translations }) } }] }) });
 const limit = () => ({ ok: false, status: 429, headers: { get: (n) => (n === "retry-after" ? "45" : null) }, json: async () => ({}) });
-const translateBlocks = (handlers, blocs) => send(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: blocs, dontSortResults: false });
+const translateBlocks = (handlers, blocs) => send(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: blocs });
 
 test("resilience: an AI failure is not remembered, retrying the same text succeeds", async () => {
   let calls = 0;

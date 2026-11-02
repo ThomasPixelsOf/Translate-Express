@@ -1,252 +1,10 @@
 "use strict";
 
-/**
- * This mark cannot contain words, like <customskipword>12</customskipword>34
- *
- * Google will reorder as <customskipword>1234</customskipword>
- *
- * Under certain circumstances，Google broken the translation, returned startMark0 in some cases
- * */
-const startMark = "@%";
-const endMark = "#$";
-const startMark0 = "@ %";
-const endMark0 = "# $";
-
-const bingMarkFrontPart = '<mstrans:dictionary translation="';
-const bingMarkSecondPart = '"></mstrans:dictionary>';
-
-let currentIndex;
-let compressionMap;
-
-/**
- * ## custom dictionary functional preprocessing
- *
- * ### How to achieve:
- * 1. For Google and Yandex, this feature is not officially supported,
- *    we convert matching keywords to a string of special signs to skip translation,
- *    before sending to the translation engine,
- *    and after the results come back, call `handleCustomWords` to restore the words.
- * 2. For Bing, this feature is officially supported,
- *    we don't need to call `handleCustomWords`, Bing absorb these marks.
- *    And bing does not have the language restrictions in the third point below.
- *
- *  ### Notes:
- *  1. For English words, ignore case when matching.
- *  2. CustomDictionary must be sorted , we want to match the keyword "Spring Boot" first then the keyword "Spring"
- *  3. For the word "app" , We don't want to "Happy" also matched.
- *     So we match only isolated words, by checking the two characters before and after the keyword.
- *     But this will also cause this method to not work for Chinese, Burmese and other languages without spaces.
- * */
-function filterKeywordsInText(
-  textContext,
-  sortedCustomDictionary,
-  currentPageTranslatorService
-) {
-  if (sortedCustomDictionary.size > 0) {
-    for (let keyWord of sortedCustomDictionary.keys()) {
-      while (true) {
-        let index = textContext.toLowerCase().indexOf(keyWord);
-        if (index === -1) {
-          break;
-        } else {
-          textContext = removeExtraDelimiter(textContext);
-          let previousIndex = index - 1;
-          let nextIndex = index + keyWord.length;
-          let previousChar =
-            previousIndex === -1 ? "\n" : textContext.charAt(previousIndex);
-          let nextChar =
-            nextIndex === textContext.length
-              ? "\n"
-              : textContext.charAt(nextIndex);
-          let placeholderText = "";
-          let keyWordWithCase = textContext.substring(
-            index,
-            index + keyWord.length
-          );
-          if (
-            isPunctuationOrDelimiter(previousChar) &&
-            isPunctuationOrDelimiter(nextChar)
-          ) {
-            /**
-             * Bing's translation engine, officially provides custom dictionary function,
-             * so it has its own separate tags.
-             * At the same time we add a space before and after the word to make it look a little more comfortable.
-             * */
-            if (currentPageTranslatorService === "bing") {
-              let customValue = sortedCustomDictionary.get(keyWord);
-              if (customValue === "") customValue = keyWordWithCase;
-              customValue =
-                " " +
-                customValue.substring(0, 1) +
-                "#n%o#" +
-                customValue.substring(1) +
-                " ";
-              placeholderText =
-                bingMarkFrontPart + customValue + bingMarkSecondPart;
-            } else {
-              placeholderText =
-                startMark + handleHitKeywords(keyWordWithCase, true) + endMark;
-            }
-          } else {
-            placeholderText = "#n%o#";
-            for (let c of Array.from(keyWordWithCase)) {
-              placeholderText += c;
-              placeholderText += "#n%o#";
-            }
-          }
-          let frontPart = textContext.substring(0, index);
-          let backPart = textContext.substring(index + keyWord.length);
-          textContext = frontPart + placeholderText + backPart;
-        }
-      }
-      textContext = textContext.replaceAll("#n%o#", "");
-    }
-  }
-  return textContext;
-}
-
-/**
- *  handle the keywords in translatedText, replace it if there is a custom replacement value.
- *  When encountering Google Translate reordering, the original text contains our mark, etc.
- *  we will catch these exceptions and call the text translation method to retranslate this section.
- *
- * Note:
- *  1. Bing's translation engine has its own separate tags,and the engine digests these tags internally,
- *  we don't need to call the method below.
- **/
-async function handleCustomWords(
-  translated,
-  originalText,
-  customDictionary,
-  currentPageTranslatorService,
-  currentSourceLanguage,
-  currentTargetLanguage
-) {
-  try {
-    if (customDictionary.size > 0 && currentPageTranslatorService !== "bing") {
-      // If the translation is a single word and exists in the dictionary, return it directly
-      let customValue = customDictionary.get(originalText.trim());
-      if (customValue) return customValue;
-
-      translated = removeExtraDelimiter(translated);
-      translated = translated.replaceAll(startMark0, startMark);
-      translated = translated.replaceAll(endMark0, endMark);
-
-      while (true) {
-        let startIndex = translated.indexOf(startMark);
-        let endIndex = translated.indexOf(endMark);
-        if (startIndex === -1 && endIndex === -1) {
-          break;
-        } else {
-          let placeholderText = translated.substring(
-            startIndex + startMark.length,
-            endIndex
-          );
-          // At this point placeholderText is actually currentIndex , the real value is in compressionMap
-          let keyWord = handleHitKeywords(placeholderText, false);
-          if (keyWord === "undefined") {
-            throw new Error("undefined");
-          }
-          let frontPart = translated.substring(0, startIndex);
-          let backPart = translated.substring(endIndex + endMark.length);
-          let customValue = customDictionary.get(keyWord.toLowerCase());
-          customValue = customValue === "" ? keyWord : customValue;
-          // Highlight custom words, make it have a space before and after it
-          frontPart = isPunctuationOrDelimiter(
-            frontPart.charAt(frontPart.length - 1)
-          )
-            ? frontPart
-            : frontPart + " ";
-          backPart = isPunctuationOrDelimiter(backPart.charAt(0))
-            ? backPart
-            : " " + backPart;
-          translated = frontPart + customValue + backPart;
-        }
-      }
-    }
-  } catch (e) {
-    return await backgroundTranslateSingleText(
-      currentPageTranslatorService,
-      currentSourceLanguage,
-      currentTargetLanguage,
-      originalText
-    );
-  }
-
-  return translated;
-}
-
-/**
- *
- * True : Store the keyword in the Map and return the index
- *
- * False : Extract keywords by index
- * */
-function handleHitKeywords(value, mode) {
-  if (mode) {
-    if (currentIndex === undefined) {
-      currentIndex = 1;
-      compressionMap = new Map();
-      compressionMap.set(currentIndex, value);
-    } else {
-      compressionMap.set(++currentIndex, value);
-    }
-    return String(currentIndex);
-  } else {
-    return String(compressionMap.get(Number(value)));
-  }
-}
-
-/**
- * any kind of punctuation character (including international e.g. Chinese and Spanish punctuation), and spaces, newlines
- *
- * source: https://github.com/slevithan/xregexp/blob/41f4cd3fc0a8540c3c71969a0f81d1f00e9056a9/src/addons/unicode/unicode-categories.js#L142
- *
- * note: XRegExp unicode output taken from http://jsbin.com/uFiNeDOn/3/edit?js,console (see chrome console.log), then converted back to JS escaped unicode here http://rishida.net/tools/conversion/, then tested on http://regexpal.com/
- *
- * suggested by: https://stackoverflow.com/a/7578937
- *
- * added: extra characters like "$", "\uFFE5" [yen symbol], "^", "+", "=" which are not consider punctuation in the XRegExp regex (they are currency or mathmatical characters)
- *
- * added: Chinese Punctuation: \u3002|\uff1f|\uff01|\uff0c|\u3001|\uff1b|\uff1a|\u201c|\u201d|\u2018|\u2019|\uff08|\uff09|\u300a|\u300b|\u3010|\u3011|\u007e
- *
- * added: special html space symbol: &nbsp; &ensp; &emsp; &thinsp; &zwnj; &zwj; -> \u00A0|\u2002|\u2003|\u2009|\u200C|\u200D
- * @see https://stackoverflow.com/a/21396529/19616126
- * */
-function isPunctuationOrDelimiter(str) {
-  if (typeof str !== "string") return false;
-  if (str === "\n" || str === " ") return true;
-  const regex =
-    /[\$\uFFE5\^\+=`~<>{}\[\]|\u00A0|\u2002|\u2003|\u2009|\u200C|\u200D|\u3002|\uff1f|\uff01|\uff0c|\u3001|\uff1b|\uff1a|\u201c|\u201d|\u2018|\u2019|\uff08|\uff09|\u300a|\u300b|\u3010|\u3011|\u007e!-#%-\x2A,-/:;\x3F@\x5B-\x5D_\x7B}\u00A1\u00A7\u00AB\u00B6\u00B7\u00BB\u00BF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u0AF0\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166D\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E3B\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]+/g;
-  return regex.test(str);
-}
-
-/**
- * get a sorted dictionary
- * */
-function sortDictionary(customDictionary) {
-  return new Map(
-    [...customDictionary.entries()].sort(
-      (a, b) => String(b[0]).length - String(a[0]).length
-    )
-  );
-}
-
-/**
- * Remove useless newlines, spaces inside, which may affect our semantics
- * */
-function removeExtraDelimiter(textContext) {
-  textContext = textContext.replaceAll("\n", " ");
-  textContext = textContext.replace(/  +/g, " ");
-  return textContext;
-}
-
 function backgroundTranslateHTML(
   translationService,
   sourceLanguage,
   targetLanguage,
   sourceArray2d,
-  dontSortResults,
   priority = "high"
 ) {
   return new Promise((resolve, reject) => {
@@ -257,7 +15,6 @@ function backgroundTranslateHTML(
         sourceLanguage,
         targetLanguage,
         sourceArray2d,
-        dontSortResults,
         priority,
       },
       (response) => {
@@ -371,9 +128,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
           htmlTagsInlineIgnore.push("pre");
         }
         break;
-      case "dontSortResults":
-        dontSortResults = newvalue == "yes" ? true : false;
-        break;
       case "pageTranslatorService":
         // Groq key saved or removed while the page is open: follow it right away.
         currentPageTranslatorService = newvalue;
@@ -392,9 +146,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   let currentSourceLanguage = "auto";
   let currentTargetLanguage = twpConfig.get("targetLanguage");
   let currentPageTranslatorService = twpConfig.get("pageTranslatorService");
-  let customDictionary = sortDictionary(twpConfig.get("customDictionary"));
-  let dontSortResults =
-    twpConfig.get("dontSortResults") == "yes" ? true : false;
 
   let fooCount = 0;
 
@@ -1181,84 +932,25 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   function translateResults(piecesToTranslateNow, results) {
     if (!Array.isArray(results)) return;
     results = results.map((r) => (Array.isArray(r) ? r : [])); // piece without an answer: ignored, retried later
-    if (dontSortResults) {
-      for (let i = 0; i < results.length; i++) {
-        for (let j = 0; j < results[i].length; j++) {
-          if (piecesToTranslateNow[i].nodes[j]) {
-            const nodes = piecesToTranslateNow[i].nodes;
-            let translated = results[i][j] + " ";
-            // In some case, results items count is over original node count
-            // Rest results append to last node
-            if (
-              piecesToTranslateNow[i].nodes.length - 1 === j &&
-              results[i].length > j
-            ) {
-              const restResults = results[i].slice(j + 1);
-              translated += restResults.join(" ");
-            }
+    for (const i in piecesToTranslateNow) {
+      for (const j in piecesToTranslateNow[i].nodes) {
+        if (results[i][j]) {
+          const nodes = piecesToTranslateNow[i].nodes;
+          const translated = results[i][j] + " ";
 
-            const originalTextNode = nodes[j];
-            const parentNode = nodes[j].parentNode;
-            const toRestore = {
-              node: nodes[j],
-              original: originalTextNode,
-              originalText: originalTextNode.textContent,
-              translatedText: translated,
-              originalScale: null,
-              parentNode,
-            };
-            nodesToRestore.push(toRestore);
+          const originalTextNode = nodes[j];
+          const parentNode = nodes[j].parentNode;
+          const toRestore = {
+            node: nodes[j],
+            original: originalTextNode,
+            originalText: originalTextNode.textContent,
+            translatedText: translated,
+            originalScale: null,
+            parentNode,
+          };
+          nodesToRestore.push(toRestore);
 
-            const originalText = originalTextNode.textContent;
-            handleCustomWords(
-              translated,
-              nodes[j].textContent,
-              customDictionary,
-              currentPageTranslatorService,
-              currentSourceLanguage,
-              currentTargetLanguage
-            ).then((results) => {
-              // results = `${originalText.match(/^\s*/)[0]}${results.trim()}${
-              //   originalText.match(/\s*$/)[0]
-              // }`;
-              translateTextContent(nodes[j], parentNode, results, toRestore);
-            });
-          }
-        }
-      }
-    } else {
-      for (const i in piecesToTranslateNow) {
-        for (const j in piecesToTranslateNow[i].nodes) {
-          if (results[i][j]) {
-            const nodes = piecesToTranslateNow[i].nodes;
-            const translated = results[i][j] + " ";
-
-            const originalTextNode = nodes[j];
-            const parentNode = nodes[j].parentNode;
-            const toRestore = {
-              node: nodes[j],
-              original: originalTextNode,
-              originalText: originalTextNode.textContent,
-              translatedText: translated,
-              parentNode,
-            };
-            nodesToRestore.push(toRestore);
-
-            const originalText = originalTextNode.textContent;
-            handleCustomWords(
-              translated,
-              nodes[j].textContent,
-              customDictionary,
-              currentPageTranslatorService,
-              currentSourceLanguage,
-              currentTargetLanguage
-            ).then((results) => {
-              // results = `${originalText.match(/^\s*/)[0]}${results.trim()}${
-              //   originalText.match(/\s*$/)[0]
-              // }`;
-              translateTextContent(nodes[j], parentNode, results, toRestore);
-            });
-          }
+          translateTextContent(nodes[j], parentNode, translated, toRestore);
         }
       }
     }
@@ -1308,10 +1000,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       currentPageTranslatorService,
       currentSourceLanguage,
       currentTargetLanguage,
-      piecesNow.map((ptt) =>
-        ptt.nodes.map((node) => filterKeywordsInText(node.textContent, customDictionary, currentPageTranslatorService))
-      ),
-      dontSortResults,
+      piecesNow.map((ptt) => ptt.nodes.map((node) => node.textContent)),
       priority
     )
       .then((results) => {
@@ -1525,8 +1214,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       currentTargetLanguage = targetLanguage;
     }
 
-    customDictionary = sortDictionary(twpConfig.get("customDictionary"));
-
     // https://github.com/FilipePS/Traduzir-paginas-web/issues/619
     if (
       location.hostname === "sberbank.com" ||
@@ -1631,7 +1318,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   pageTranslator.improveTranslation = function (info) {
     currentPageTranslatorService = info.pageTranslatorService;
-    dontSortResults = info.dontSortResults === "yes" ? true : false;
     currentSourceLanguage = info.sourceLanguage;
     if (pageLanguageState === "translated") {
       pageTranslator.translatePage(info.targetLanguage);
@@ -1705,8 +1391,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       pageTranslator.improveTranslation(request);
     } else if (request.action === "getCurrentSourceLanguage") {
       sendResponse(currentSourceLanguage);
-    } else if (request.action === "getDontSortResults") {
-      sendResponse(dontSortResults);
     } else if (request.action === "cleanUp") {
       pageTranslator.restorePage();
     } else if (request.action === "currentTargetLanguage") {
