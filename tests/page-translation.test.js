@@ -84,7 +84,7 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
   return { w, requests, priorities, send, text };
 }
 
-const skipReason = JSDOM ? false : "jsdom introuvable";
+const skipReason = JSDOM ? false : "jsdom not found";
 
 test("simulated page: text on screen, below the screen and a block taller than the screen are translated; very distant text is translated afterwards", { skip: skipReason, timeout: 30000 }, async () => {
   const page = createPage();

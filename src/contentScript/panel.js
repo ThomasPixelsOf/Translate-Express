@@ -490,11 +490,18 @@
       host.style.cssText = "all: initial;";
       const root = host.attachShadow({ mode: "open" });
       root.innerHTML = `<style>
-        button { position: fixed; z-index: 2147483647; width: 28px; height: 28px; padding: 0; border-radius: 14px; border: 1px solid rgba(0,0,0,.2);
-          background: #0f62fe; color: #fff; cursor: pointer; font: 700 12px/1 system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
-        button:hover { background: #0353e9; }
-      </style><button title="Translate the selection" aria-label="Translate the selection">A</button>`;
+        button { position: fixed; z-index: 2147483647; width: 30px; height: 30px; padding: 0; border-radius: 15px; border: 1px solid #3a3a3e;
+          background: #1c1c1e; color: #f2f2f4; cursor: pointer; font: 700 12px/1 system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+          display: flex; align-items: center; justify-content: center; }
+        button:hover { border-color: #4589ff; }
+        img { width: 20px; height: 20px; display: block; }
+      </style><button title="Translate the selection" aria-label="Translate the selection"></button>`;
       const el = root.querySelector("button");
+      // The extension's logo; the letter "A" if the icon cannot be loaded.
+      const logo = document.createElement("img");
+      logo.alt = "";
+      logo.addEventListener("error", () => { logo.remove(); el.textContent = "A"; });
+      try { logo.src = chrome.runtime.getURL("/icons/icon-32.png"); el.appendChild(logo); } catch (e) { el.textContent = "A"; }
       // The selection must survive the click on the bubble.
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {
@@ -524,11 +531,11 @@
     bubble.text = text;
     bubble.info = info;
     bubble.anchor = { left: last.left, right: last.right, top: last.top, bottom: last.bottom };
-    const size = 28;
+    const size = 30;
     bubble.el.style.left = Math.max(4, Math.min(window.innerWidth - size - 4, last.right + 4)) + "px";
     bubble.el.style.top = Math.max(4, Math.min(window.innerHeight - size - 4, last.bottom + 4)) + "px";
     clearTimeout(bubble.timer);
-    bubble.timer = setTimeout(hideBubble, 8000); // la bulle s'efface toute seule
+    bubble.timer = setTimeout(hideBubble, 8000); // the bubble disappears by itself
   }
 
   // Wait for the end of the gesture (mouse released or key released) before showing the bubble.

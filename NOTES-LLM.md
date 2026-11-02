@@ -9,7 +9,7 @@ The extension keeps only the essentials: no browser popup, no options page, no k
 
 | Where you click | Entry | Effect |
 |---|---|---|
-| when you select text | a **"A" bubble** appears near the selection | a click opens a small floating panel just below the text with the translation (Copy; the Window button opens it in the page's docked panel); the "Show a bubble when I select text" checkbox of the menu turns the bubble off (it disappears by itself after 8 s) |
+| when you select text | a **bubble with the extension's logo** appears near the selection | a click opens a small floating panel just below the text with the translation (Copy; the Window button opens it in the page's docked panel); the "Show a bubble when I select text" checkbox of the menu turns the bubble off (it disappears by itself after 8 s) |
 | on selected text | **Translate selection** | a panel opens near the selection with the translation (Copy) |
 | in an input field | **Translate what I'm writing** | panel with the live translation of what you write; **Replace** replaces the field's text (or the selected part) |
 | on the page | **Translate this page to ...** / **Show original page** | translates the whole page, then goes back to the original |

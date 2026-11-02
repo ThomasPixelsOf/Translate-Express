@@ -9,11 +9,11 @@ let JSDOM = null;
 for (const filePath of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
   try { ({ JSDOM } = require(filePath)); break; } catch (e) { /* next */ }
 }
-const skipReason = JSDOM ? false : "jsdom introuvable";
+const skipReason = JSDOM ? false : "jsdom not found";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const CODE = fs.readFileSync(path.join(__dirname, "..", "src", "contentScript", "panel.js"), "utf8");
 
-function createPage({ afficherBulle = "yes" } = {}) {
+function createPage({ showBubbleSetting = "yes" } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>
     <p id="p">Bonjour tout le monde, ceci est un text de la page.</p>
     <textarea id="t" style="width:300px">Bonjour a tous, voici mon message en francais pour vous.</textarea>
@@ -23,7 +23,7 @@ function createPage({ afficherBulle = "yes" } = {}) {
   const sentMessages = [];
   w.chrome = {
     runtime: {
-      onMessage: { addListener() {} }, lastError: undefined,
+      onMessage: { addListener() {} }, lastError: undefined, getURL: (p) => "chrome-extension://test" + p,
       sendMessage: (m, cb) => {
         sentMessages.push(m);
         if (cb) setTimeout(() => cb(m.action === "llmLive" ? { ok: true, text: "[translated] " + m.text } : undefined), 0);
@@ -31,7 +31,7 @@ function createPage({ afficherBulle = "yes" } = {}) {
     },
     i18n: { getUILanguage: () => "fr" },
   };
-  const settings = { showTranslateSelectedButton: afficherBulle, targetLanguage: "fr", writeLanguage: "en" };
+  const settings = { showTranslateSelectedButton: showBubbleSetting, targetLanguage: "fr", writeLanguage: "en" };
   const saved = [];
   w.twpConfig = {
     get: (k) => (k in settings ? settings[k] : null),
@@ -156,7 +156,7 @@ test("no bubble: password field, selection too short, bubble turned off; it disa
 });
 
 test("bubble turned off in the menu: nothing appears", { skip: skipReason }, async () => {
-  const page = createPage({ afficherBulle: "no" });
+  const page = createPage({ showBubbleSetting: "no" });
   try {
     const t = page.doc.getElementById("t");
     t.focus(); t.setSelectionRange(0, 7);
@@ -208,5 +208,22 @@ test("memory: reopening the bubble on the same text does not call the AI again; 
     page.panelRoot().querySelector(".refresh").click();
     await wait(40);
     assert.equal(calls(), 2, "the button forces a new translation");
+  } finally { page.w.close(); }
+});
+
+test("the bubble shows the extension's logo, and falls back to a letter without it", { skip: skipReason }, async () => {
+  const page = createPage();
+  try {
+    const node = page.doc.getElementById("p").firstChild;
+    const r = page.doc.createRange(); r.setStart(node, 0); r.setEnd(node, 7);
+    page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
+    page.release();
+    await wait(40);
+    const img = page.bubble().shadowRoot.querySelector("img");
+    assert.ok(img, "the bubble contains the logo");
+    assert.match(img.src, /\/icons\/icon-32\.png$/);
+    img.dispatchEvent(new page.w.Event("error"));
+    assert.equal(page.bubble().shadowRoot.querySelector("img"), null, "icon failed: the image is removed");
+    assert.equal(page.bubble().shadowRoot.querySelector("button").textContent, "A", "and the letter takes over");
   } finally { page.w.close(); }
 });
