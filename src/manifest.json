@@ -11,6 +11,9 @@
     "64": "/icons/icon-64.png",
     "128": "/icons/icon-128.png"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'"
+  },
   "host_permissions": ["<all_urls>"],
   "permissions": ["storage", "contextMenus", "alarms"],
   "web_accessible_resources": [

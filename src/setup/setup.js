@@ -7,7 +7,12 @@
     $("#status").textContent = text;
     $("#status").className = error ? "error" : "";
   };
-  const llmFromForm = () => ({ name: "llm", provider: "auto", apiKey: $("#key").value.trim(), model: $("#model").value });
+  // The saved key is never written back into the page: the field stays empty and a newly typed key replaces it.
+  let savedKey = "";
+  const llmFromForm = () => ({ name: "llm", provider: "auto", apiKey: $("#key").value.trim() || savedKey, model: $("#model").value });
+  function showKeyState() {
+    $("#key").placeholder = savedKey ? "Key saved (hidden) - paste a new one to replace it" : "gsk_...";
+  }
 
   function setModels(models, selected) {
     const select = $("#model");
@@ -45,7 +50,10 @@
     const others = twpConfig.get("customServices").filter((cs) => cs.name !== "llm");
     twpConfig.set("customServices", [...others, llm]);
     twpConfig.set("enabledServices", [...twpConfig.get("enabledServices").filter((s) => s !== "llm"), "llm"]);
-    twpConfig.set("pageTranslatorService", "llm"); // l'IA devient le traducteur de pages
+    twpConfig.set("pageTranslatorService", "llm"); // the AI becomes the page translator
+    savedKey = llm.apiKey;
+    $("#key").value = "";
+    showKeyState();
     chrome.runtime.sendMessage({ action: "createLlmService", llm }, checkedLastError);
     setStatus("Testing...");
     chrome.runtime.sendMessage({ action: "testLlmService", llm }, (r) => {
@@ -56,6 +64,9 @@
   }
 
   function remove() {
+    savedKey = "";
+    $("#key").value = "";
+    showKeyState();
     twpConfig.set("customServices", twpConfig.get("customServices").filter((cs) => cs.name !== "llm"));
     twpConfig.set("enabledServices", twpConfig.get("enabledServices").filter((s) => s !== "llm"));
     if (twpConfig.get("pageTranslatorService") === "llm") twpConfig.set("pageTranslatorService", "google");
@@ -103,9 +114,10 @@
     initLanguage();
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
     if (llm) {
-      $("#key").value = llm.apiKey || "";
+      savedKey = llm.apiKey || "";
       setModels([], llm.model || "");
     }
+    showKeyState();
     $("#save").onclick = save;
     $("#remove").onclick = remove;
     $("#load").onclick = loadModels;

@@ -4,6 +4,10 @@ const twpConfig = (function () {
   /** @type {function[]} */
   const observers = [];
   const defaultTargetLanguages = ["en", "es", "de"];
+  // Settings holding secrets (the API key lives in customServices). Scripts injected in web pages never load them
+  // nor write them: only the service worker and the extension's own pages need the key.
+  const SECRET_KEYS = ["customServices"];
+  const inWebPage = typeof location !== "undefined" && /^(https?|file|ftp):$/.test(location.protocol);
   /**
    * all configName available
    * @typedef {"uiLanguage" | "pageTranslatorService" | "enabledServices" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageFixed" | "writeLanguage" | "diagnostics" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "alwaysTranslateLangs" | "neverTranslateLangs" | "customDictionary" | "showOriginalTextWhenHovering" | "showTranslateSelectedButton" | "darkMode" | "translateTag_pre" | "enableIframePageTranslation" | "dontSortResults" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "enableDiskCache" | "useAlternativeService" | "customServices" | "proxyServers"} DefaultConfigNames
@@ -95,6 +99,7 @@ const twpConfig = (function () {
    * @param {*} value
    */
   twpConfig.set = function (name, value) {
+    if (inWebPage && SECRET_KEYS.includes(name)) return;
     // @ts-ignore
     config[name] = value;
     const obj = {};
@@ -116,6 +121,7 @@ const twpConfig = (function () {
     twpConfig.onReady(function () {
       if (areaName === "local") {
         for (const name in changes) {
+          if (inWebPage && SECRET_KEYS.includes(name)) continue;
           const newValue = changes[name].newValue;
           if (config[name] !== newValue) {
             config[name] = fixObjectType(name, newValue);
@@ -128,7 +134,9 @@ const twpConfig = (function () {
 
   // load config
   chrome.i18n.getAcceptLanguages((acceptedLanguages) => {
-    chrome.storage.local.get(null, (onGot) => {
+    // In a web page, ask only for the non-secret settings: the key is never even read there.
+    const wanted = inWebPage ? Object.keys(defaultConfig).filter((k) => !SECRET_KEYS.includes(k)) : null;
+    chrome.storage.local.get(wanted, (onGot) => {
       // load config; convert object/array to map/set if necessary
       for (const name in onGot) {
         config[name] = fixObjectType(name, onGot[name]);

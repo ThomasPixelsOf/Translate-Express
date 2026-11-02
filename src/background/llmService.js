@@ -41,6 +41,7 @@ var twpLlm = (function () {
   async function findModel(cfg) {
     let ids = [];
     try {
+      assertSecureUrl(cfg.url);
       const res = await fetch(apiBase(cfg.url) + "/models", { headers: { Authorization: "Bearer " + cfg.apiKey } });
       if (res.ok) ids = ((await res.json()).data || []).map((m) => m.id).filter((id) => typeof id === "string");
     } catch (e) {}
@@ -58,7 +59,7 @@ var twpLlm = (function () {
 
   // Full configuration from what the user typed (the key is enough).
   // The result is remembered: the automatically chosen model is looked up only once per configuration.
-  const configsConnues = new Map();
+  const knownConfigs = new Map();
   function normalize(config) {
     const provider = config.provider && config.provider !== "auto" ? config.provider : detectProvider(config.apiKey);
     const def = PROVIDERS[provider] || PROVIDERS.custom;
@@ -69,8 +70,8 @@ var twpLlm = (function () {
       model: String(config.model || "").trim(),
     };
     const key = [cfg.provider, cfg.url, cfg.apiKey, cfg.model].join("|");
-    if (!configsConnues.has(key)) configsConnues.set(key, cfg);
-    return configsConnues.get(key);
+    if (!knownConfigs.has(key)) knownConfigs.set(key, cfg);
+    return knownConfigs.get(key);
   }
 
   const MAX_CONCURRENT = 4; // simultaneous requests to the provider
@@ -181,6 +182,22 @@ var twpLlm = (function () {
   };
   let requestSequence = 0;
 
+  // The key is only sent over HTTPS (plain HTTP only for a server on this machine).
+  function assertSecureUrl(url) {
+    let u;
+    try {
+      u = new URL(url);
+    } catch (e) {
+      u = null;
+    }
+    const local = u && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+    if (!u || !(u.protocol === "https:" || (u.protocol === "http:" && local))) {
+      const err = new Error("refusing to send the API key to an insecure address");
+      err.definitive = true;
+      throw err;
+    }
+  }
+
   // Simple queue: at most MAX_CONCURRENT calls in progress, the others wait.
   let inProgress = 0;
   const queue = [];
@@ -257,6 +274,7 @@ var twpLlm = (function () {
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       let delay = 0;
       try {
+        assertSecureUrl(cfg.url);
         const res = await fetch(cfg.url, {
           method: "POST",
           signal: ctrl.signal,
@@ -494,6 +512,7 @@ var twpLlm = (function () {
   async function fetchModels(config) {
     const cfg = normalize(config);
     if (!cfg.url || !cfg.apiKey) throw new Error("an API key is required");
+    assertSecureUrl(cfg.url);
     const res = await fetch(apiBase(cfg.url) + "/models", { headers: { Authorization: "Bearer " + cfg.apiKey } });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const ids = ((await res.json()).data || []).map((m) => m.id).filter((id) => typeof id === "string");

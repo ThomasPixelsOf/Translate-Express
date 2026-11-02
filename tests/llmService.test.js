@@ -1,6 +1,6 @@
 // Tests of the language-model translation service (src/background/llmService.js), without network:
 // `fetch` is replaced by a fake OpenAI-compatible server.
-// Lancer : node --test tests/
+// Run: node --test "tests/*.test.js"
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const twpLlm = require("../src/background/llmService.js");
@@ -19,12 +19,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 twpLlm._test.configureBudget({ limit: 1e9 });
 const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "some-model/test-1" };
 
-function fakeFetch(reponses) {
+function fakeFetch(responses) {
   twpLlm._test.resetBudget(); // a block or spending from a previous test must not get in the way of this one
   const calls = [];
   global.fetch = async (url, init) => {
     calls.push({ url, init, body: init && init.body ? JSON.parse(init.body) : null });
-    const r = reponses.shift();
+    const r = responses.shift();
     if (r.network) throw new Error("network down");
     return {
       ok: r.status === undefined || r.status < 400,
@@ -313,4 +313,16 @@ test("saturated budget: a request that would wait too long fails right away (fal
   } finally {
     twpLlm._test.configureBudget({ windowMs: 60000, limit: 1e9 });
   }
+});
+
+test("security: the API key is never sent over an insecure address", async () => {
+  const calls = fakeFetch([{ content: '{"translations":["x"]}' }]);
+  const insecure = twpLlm.create(FakeService, Utils, { ...config, url: "http://api.example.com/v1/chat/completions" });
+  await assert.rejects(() => insecure.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /insecure/);
+  await assert.rejects(() => twpLlm.listModels({ ...config, url: "http://api.example.com/v1/chat/completions" }), /insecure/);
+  assert.equal(calls.length, 0, "no request left with the key");
+  // HTTPS and a server on this machine are fine
+  const local = twpLlm.create(FakeService, Utils, { ...config, url: "http://localhost:11434/v1/chat/completions" });
+  assert.deepEqual(await local.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), ["x"]);
+  assert.equal(calls.length, 1);
 });

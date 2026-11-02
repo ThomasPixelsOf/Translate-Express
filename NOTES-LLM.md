@@ -89,6 +89,19 @@ Blocks of text already written in the target language are not translated again: 
 
 A log (last 1,000 events, session storage) records the requests to the AI (duration, budget wait, tokens, 429), the translation calls, the sends and results of the page, and the guards (stuck pieces, detected stalls). Setting `diagnostics` = "no" turns it off. The dashboard opens in a popup window (right-click, "Dashboard (diagnostics)", also in the toolbar icon menu): a summary with findings in plain words, the state of the page (why each text is not translated, including text written back unchanged), a filterable log, and a "Copy report" button. Calculations are in `src/dashboard/metrics.js` (tested).
 
+## Security of the API key
+
+What is done (all covered by `tests/security.test.js` and `tests/llmService.test.js`):
+
+- The key lives only in the extension's own storage, which web pages cannot reach.
+- Scripts injected in web pages never load, receive or write it: `lib/config.js` does not request the `customServices` setting there, ignores changes to it, and refuses to write it. Only the service worker and the extension's own pages (settings, message window) hold the key.
+- It is only sent over HTTPS (plain HTTP only to a server on this machine), in the `Authorization` header, to the provider's address. A key recognized as `gsk_` always goes to Groq's fixed address.
+- The settings page never writes the saved key back into the page: the field stays empty ("Key saved (hidden)") and a newly typed key replaces the old one.
+- The diagnostic log and its copyable report mask anything that looks like a key (`gsk_...`, `sk-...`, `Bearer ...`) before an event is stored.
+- The extension pages have a strict Content Security Policy (`script-src 'self'; object-src 'self'; base-uri 'none'`).
+
+What is not done, and why: the key is stored in clear in the browser profile. An extension cannot protect a secret from someone who has access to the profile or from malware on the machine: encrypting it would need a key stored next to it (obfuscation, not security) or a passphrase typed at every browser start. Use a dedicated Groq key that you can revoke from Groq's console.
+
 ## Theme
 
 Everything is dark at all times (message window, settings, dashboard, bubble, panels), whatever the browser theme.
@@ -142,6 +155,6 @@ node --test "tests/*.test.js"
 
 ## Good to know
 
-- The tests (80) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- The tests (87) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: translating the extension's own interface (English only) and automatically sending back to Groq the texts that came back unchanged.

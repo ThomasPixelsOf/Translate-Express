@@ -42,10 +42,18 @@ var twpDiag = (function () {
     persistSoon();
   }
 
+  // Defense in depth: provider error messages must never carry a key into the log.
+  const SECRET = /\b(?:gsk_|sk-or-|sk-)[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+\/=-]{8,}/g;
+  function mask(value) {
+    return typeof value === "string" ? value.replace(SECRET, "[key]") : value;
+  }
+
   /** Adds an event: short type ("llm.request", "html.call"...) and data. */
   function log(type, data = {}) {
     if (!enabled()) return;
-    push({ t: Date.now(), type, ...data });
+    const safe = {};
+    for (const k in data) safe[k] = mask(data[k]);
+    push({ t: Date.now(), type, ...safe });
   }
 
   // The service worker goes to sleep: the log is reloaded on wake-up.
