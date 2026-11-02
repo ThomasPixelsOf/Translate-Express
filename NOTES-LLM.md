@@ -129,6 +129,9 @@ Everything is dark at all times (message window, settings, dashboard, bubble, pa
 
 ## What was removed
 
+After the first cut, a second clean-up removed the code of the original project that nothing could reach any more, because the screens that set it had been removed: the translation cache (it was never written, so every lookup missed), the original-text-on-hover feature, the custom dictionary and the "do not sort" option, the automatic translation rules by site and by language with the tab language detection, proxy servers, the three favourite languages list, platform helpers, and the special cases for PDF viewers and a few sites. About 2,000 lines went (7,300 to 5,300 lines of code, without the language-name table). The rest of this list is the first cut.
+
+
 Popup (replaced by our own toolbar popup), options page, shortcuts, floating button, translation on hover, text to speech, the Bing, Yandex, DeepL and LibreTranslate services, polyfill, W3 style sheet, the original 40 interface languages and their `_locales` files (replaced by `src/lib/ui/`), build tools (gulp, webpack), donations, release notes. The removed code can be found in the first commit of this repository (the original project as is).
 
 ## What remains (all the useful code)
@@ -137,12 +140,12 @@ Popup (replaced by our own toolbar popup), options page, shortcuts, floating but
 |---|---|
 | `src/manifest.json` | permissions `storage`, `contextMenus` and `alarms` (automatic reload) |
 | `src/bg.js`, `src/background/menu.js` | right-click menu, window opening, page messages |
-| `src/background/translationService.js`, `translationCache.js` | translation engine (free Google + AI) and cache |
+| `src/background/translationService.js` | translation engine (free Google + AI) and cache |
 | `src/background/llmService.js` | Groq service: provider recognized from the `gsk_` key, automatic model, rate limits, answer checking |
 | `src/background/skipTargetLanguage.js` | skips blocks already in the target language |
 | `src/background/diagnostics.js`, `src/dashboard/` | diagnostic log and dashboard |
 | `src/background/devReload.js` | automatic reload during development |
-| `src/contentScript/pageTranslator.js`, `showOriginal.js` | original page translation (TWP), with our fixes |
+| `src/contentScript/pageTranslator.js` | original page translation (TWP), with our fixes |
 | `src/contentScript/panel.js` | the panel and bubble (selection and input fields) |
 | `src/lib/ui-text.js`, `src/lib/ui/` | interface texts and languages |
 | `src/popup/` | the toolbar popup: tabs that show the three pages below |
@@ -169,11 +172,11 @@ Our history does not contain the original project's (only its 10.2.5.0 state in 
 ```
 git remote add upstream https://github.com/FilipePS/Traduzir-paginas-web.git
 git fetch upstream chrome-mv3
-git diff <first-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js src/contentScript/showOriginal.js
+git diff <first-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js
 node --test "tests/*.test.js"
 ```
 
-`<first-commit>` is the very first commit of this repository (`git rev-list --max-parents=0 HEAD`). The diff shows what changed in the original project since our base; what touches `pageTranslator.js`, `showOriginal.js` and Google's translation logic is taken by hand, keeping our version of the rest (many files were removed or rewritten: `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
+`<first-commit>` is the very first commit of this repository (`git rev-list --max-parents=0 HEAD`). The diff shows what changed in the original project since our base; what touches `pageTranslator.js` and Google's translation logic is taken by hand, keeping our version of the rest (many files were removed or rewritten: `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
 
 ## Good to know
 
