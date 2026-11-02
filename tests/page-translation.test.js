@@ -58,7 +58,7 @@ function creerPage({ echecsAvantSucces = 0 } = {}) {
     extension: { inIncognitoContext: false },
     i18n: { getUILanguage: () => "fr", getMessage: () => "", detectLanguage: (t, cb) => cb({ isReliable: false, languages: [] }) },
   };
-  const defauts = { customDictionary: new Map(), targetLanguages: ["fr"], targetLanguage: "fr", pageTranslatorService: "google", translateTag_pre: "no" };
+  const defauts = { customDictionary: new Map(), targetLanguages: ["fr"], targetLanguage: "fr", pageTranslatorService: "google", translateTag_pre: "yes", translateDynamicallyCreatedContent: "yes" };
   w.twpConfig = {
     get: (k) => (k in defauts ? defauts[k] : (/Sites|Langs|Languages$/.test(k) ? [] : "no")),
     set() {}, onChanged() {}, onReady: (cb) => cb && cb(),
@@ -118,4 +118,110 @@ test("page simulée : l'original revient intact avec « restorePage »", { skip:
   await attendre(300);
   assert.equal(page.texte("p1"), avant);
   } finally { fermer(); }
+});
+
+// ---- Texte qui échappe à la traduction : tous les cas doivent être rattrapés ----
+// Page de départ traduite, puis on modifie la page comme le ferait une application (AJAX, React, composants isolés...).
+async function pageTraduite(extraBody = "", avantTraduction = () => {}) {
+  const page = creerPage();
+  if (extraBody) page.w.document.body.insertAdjacentHTML("beforeend", extraBody);
+  avantTraduction(page);
+  await attendre(150);
+  page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
+  await attendre(1200);
+  return page;
+}
+const position = (el, haut = 100, bas = 140) => { el.setAttribute("data-top", String(haut)); el.setAttribute("data-bottom", String(bas)); return el; };
+const estTraduit = (txt) => /\[fr\]/.test(txt);
+
+test("texte ajouté après coup : un nœud texte nu ajouté dans un élément existant est traduit", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite();
+  try {
+    const p = page.w.document.getElementById("p1");
+    p.appendChild(page.w.document.createTextNode(" Extra sentence added later by the application."));
+    await attendre(3500); // le traducteur relit les ajouts toutes les 2 s
+    assert.match(p.textContent, /\[fr\]\s+Extra sentence added later/, "un texte nu ajouté était ignoré avant la correction");
+  } finally { page.w.close(); }
+});
+
+test("texte ajouté après coup : un élément en ligne (span) ajouté dans un élément existant est traduit", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite();
+  try {
+    const p = page.w.document.getElementById("p2");
+    const span = page.w.document.createElement("span");
+    span.textContent = "Inline label appended dynamically";
+    p.appendChild(span);
+    await attendre(3500);
+    assert.match(span.textContent, /\[fr\] Inline label appended/, "un élément en ligne ajouté était ignoré avant la correction");
+  } finally { page.w.close(); }
+});
+
+test("texte modifié par la page : un nœud déjà traduit dont le texte est remplacé est retraduit", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite();
+  try {
+    const p = page.w.document.getElementById("p3");
+    const noeud = p.firstChild.nodeType === 3 ? p.firstChild : p.firstChild.firstChild; // le texte (éventuellement dans <font>)
+    assert.match(p.textContent, /\[fr\]/, "d'abord traduit");
+    noeud.data = "Brand new English sentence written by the page.";
+    await attendre(3500);
+    assert.match(p.textContent, /\[fr\] Brand new English sentence/, "un texte modifié par la page n'était jamais retraduit");
+  } finally { page.w.close(); }
+});
+
+test("zone isolée (shadow DOM) : le texte qu'elle contient est traduit, y compris ce qui y est ajouté ensuite", { skip: ignorer, timeout: 30000 }, async () => {
+  let interieur;
+  const page = await pageTraduite("", (pg) => {
+    const hote = pg.w.document.createElement("div");
+    position(hote, 300, 360);
+    pg.w.document.body.appendChild(hote);
+    const racine = hote.attachShadow({ mode: "open" });
+    interieur = pg.w.document.createElement("p");
+    position(interieur, 300, 340);
+    interieur.textContent = "Text living inside an isolated component.";
+    racine.appendChild(interieur);
+  });
+  try {
+    assert.match(interieur.textContent, /\[fr\]/, "texte présent au départ dans la zone isolée");
+    const ajout = page.w.document.createElement("p");
+    position(ajout, 350, 380);
+    ajout.textContent = "Another sentence added inside the isolated component.";
+    interieur.parentNode.appendChild(ajout);
+    await attendre(3500);
+    assert.match(ajout.textContent, /\[fr\] Another sentence added inside/, "ajout dans une zone isolée");
+  } finally { page.w.close(); }
+});
+
+test("bloc <code> : du texte normal affiché en police à chasse fixe est traduit, du vrai code ne l'est pas", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite(
+    '<code id="prose" data-top="400" data-bottom="440">Instructions for submitting an IT helpdesk request: describe the problem in detail.</code>' +
+    '<code id="vrai" data-top="450" data-bottom="470">const total = compute(a, b) ? x[0] : y{1};</code>'
+  );
+  try {
+    assert.match(page.texte("prose"), /^\[fr\]/, "texte normal dans <code> : traduit");
+    assert.doesNotMatch(page.texte("vrai"), /\[fr\]/, "vrai code : laissé tel quel");
+  } finally { page.w.close(); }
+});
+
+test("le balayage de sécurité rattrape un texte que ni l'observateur ni la file n'ont vu", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite();
+  try {
+    // On insère un paragraphe puis on « oublie » qu'il a été vu : seul le balayage périodique peut le retrouver.
+    const p = page.w.document.createElement("p");
+    position(p, 200, 240);
+    p.textContent = "Paragraph inserted behind the back of every observer.";
+    page.w.document.body.appendChild(p);
+    await attendre(6500); // balayage toutes les 4 s
+    assert.match(p.textContent, /\[fr\] Paragraph inserted/);
+  } finally { page.w.close(); }
+});
+
+test("pas de boucle : un texte déjà traduit n'est pas renvoyé au traducteur à chaque balayage", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = await pageTraduite();
+  try {
+    await attendre(500);
+    const avant = page.demandes.length;
+    await attendre(9000); // deux balayages et plusieurs relectures
+    assert.equal(page.demandes.length, avant, "aucune nouvelle demande : le texte déjà traduit n'est pas retraduit");
+    assert.doesNotMatch(page.texte("p1"), /\[fr\] \[fr\]/, "pas de double traduction");
+  } finally { page.w.close(); }
 });

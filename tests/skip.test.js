@@ -57,3 +57,12 @@ test("un bloc qui contient un peu d'anglais dans du français est considéré co
   const incertain = async () => ({ isReliable: true, languages: [{ language: "fr", percentage: 55 }, { language: "en", percentage: 45 }] });
   assert.deepEqual(await twpSkip.alreadyInTarget([[FR]], "fr", incertain), [false], "moitié-moitié : on traduit");
 });
+
+test("un bloc de plusieurs morceaux (français et anglais mélangés) n'est jamais sauté : l'anglais ne doit pas rester non traduit", async () => {
+  const res = await twpSkip.alreadyInTarget([[FR, EN], [FR, FR + " Suite."], [FR]], "fr", detect);
+  assert.deepEqual(res, [false, false, true], "seul le bloc d'un morceau en français est sauté");
+  let envoyes = 0;
+  const out = await twpSkip.translateSkippingTarget([[FR, EN]], "fr", async (b) => { envoyes++; return b.map((x) => x.map((s) => "T:" + s)); }, detect);
+  assert.equal(envoyes, 1);
+  assert.deepEqual(out, [["T:" + FR, "T:" + EN]], "le bloc mixte est envoyé en entier, l'anglais est traduit");
+});

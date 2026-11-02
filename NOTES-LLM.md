@@ -29,6 +29,23 @@ TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté I
 
 L'état « page traduite ou non » est propre à chaque onglet : le titre de l'entrée du menu (« Translate this page to … » ou « Show original page ») est recalculé quand on change d'onglet ou de fenêtre, et un clic agit selon l'état de l'onglet cliqué. Une page qui se recharge redevient « à traduire ». L'état n'est jamais mémorisé dans le service worker : on le demande à l'onglet.
 
+## Rien ne doit rester non traduit : tous les cas de texte qui échappait
+
+Le traducteur d'origine laissait échapper du texte dans plusieurs situations, toutes couvertes maintenant (`pageTranslator.js`, tests dans `tests/page-translation.test.js` sur une page simulée) :
+
+| Situation | Avant | Maintenant |
+|---|---|---|
+| texte nu ajouté après coup dans un élément existant (AJAX) | ignoré | traduit |
+| élément en ligne (span, lien) ajouté après coup | ignoré | traduit |
+| texte d'un nœud existant remplacé par la page (React, mises à jour de libellés) | jamais retraduit | retraduit |
+| composant isolé (shadow DOM ouvert), y compris ce qui y est ajouté | lu au départ seulement | surveillé et traduit |
+| texte normal affiché dans une balise `<code>` (courriel, consignes en police à chasse fixe) | jamais traduit | traduit (le vrai code ne l'est pas) |
+| bloc plus haut que l'écran, morceau dont la requête a échoué | jamais traduit | traduit, réessayé |
+| message mixte (français et anglais dans le même bloc) | pouvait être sauté en entier par mon filtre de langue | envoyé en entier ; seuls les blocs d'un seul morceau déjà dans la langue cible sont sautés |
+| tout ce que rien d'autre n'a vu | restait en version originale | balayage de sécurité toutes les 4 s |
+
+Un texte reste volontairement non traduit dans ces cas : zone éditable (`contenteditable`, pour ne pas toucher à ce que l'utilisateur écrit), contenu de `<textarea>`, éléments marqués `translate="no"` ou `notranslate` par le site, vrai code, cadres d'un autre site non accessibles.
+
 ## Résilience : une partie en échec ne bloque pas le reste
 
 Côté moteur (`translationService.js`) : une requête qui échoue ne fait plus échouer tout le lot (son bloc est rendu vide, les autres sont gardés) ; un échec n'est plus mémorisé (avant, la nouvelle tentative du même texte échouait aussitôt) ; les blocs que l'IA n'a pas pu traduire sont confiés à Google bloc par bloc. Côté page (`pageTranslator.js`) : un morceau sans réponse est réessayé jusqu'à 6 fois (2 s, 4 s, 8 s, 16 s, 30 s, 30 s). `tests/boot.test.js` contient deux tests de ce scénario qui échouaient sur le code précédent.

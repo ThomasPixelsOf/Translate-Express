@@ -28,6 +28,10 @@ var twpSkip = (function () {
   async function alreadyInTarget(sourceArray2d, targetLanguage, detect, fix = (c) => c) {
     return await Promise.all(
       sourceArray2d.map(async (block) => {
+        // Un bloc de plusieurs morceaux (texte coupé par des balises, des sauts de ligne...) peut mélanger deux langues :
+        // la détection globale donnerait la langue majoritaire et le reste ne serait jamais traduit. On ne filtre donc que
+        // les blocs d'un seul morceau ; les autres sont envoyés (le traducteur laisse tel quel ce qui est déjà dans la langue cible).
+        if (block.length !== 1) return false;
         const text = block.join(" ").trim();
         if (text.length < MIN_CHARS) return false;
         try {

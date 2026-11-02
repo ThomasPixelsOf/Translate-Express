@@ -406,27 +406,39 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   let nodesToRestore = [];
 
+  // Textes déjà pris en charge (collectés, ou écrits par nous). Sert à repérer ceux qui ont échappé à la traduction :
+  // texte ajouté après coup, texte modifié par la page, texte dans une zone isolée (shadow DOM)...
+  let seenTextNodes = new WeakSet();
+  const writtenText = new WeakMap(); // nœud texte -> texte que NOUS y avons écrit (pour ne pas confondre avec un changement de la page)
+
+  function markSeen(node) {
+    if (!node) return;
+    seenTextNodes.add(node);
+    if (node.nodeType === 1) {
+      for (const child of node.childNodes) if (child.nodeType === 3) seenTextNodes.add(child);
+    }
+  }
+
+  // Ajoute à la file seulement les nœuds texte jamais vus ; retourne le nombre de morceaux ajoutés.
+  function adoptPieces(newPieces) {
+    let added = 0;
+    for (const piece of newPieces) {
+      const fresh = piece.nodes.filter((n) => !seenTextNodes.has(n));
+      if (fresh.length === 0) continue;
+      fresh.forEach((n) => seenTextNodes.add(n));
+      piece.nodes = fresh;
+      piece.isTranslated = false;
+      piecesToTranslate.push(piece);
+      added++;
+    }
+    return added;
+  }
+
   function translateNewNodes() {
     try {
       newNodes.forEach((nn) => {
         if (removedNodes.indexOf(nn) != -1) return;
-
-        let newPiecesToTranslate = getPiecesToTranslate(nn);
-
-        for (const i in newPiecesToTranslate) {
-          const newNodes = newPiecesToTranslate[i].nodes;
-          let finded = false;
-
-          for (const ntt of piecesToTranslate) {
-            if (ntt.nodes.some((n1) => newNodes.some((n2) => n1 === n2))) {
-              finded = true;
-            }
-          }
-
-          if (!finded) {
-            piecesToTranslate.push(newPiecesToTranslate[i]);
-          }
-        }
+        adoptPieces(getPiecesToTranslate(nn));
       });
     } catch (e) {
       console.error(e);
@@ -436,18 +448,45 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
+  // Balayage de sécurité : toutes les 4 s, on relit la page et on traduit ce qui a échappé à tous les autres mécanismes.
+  let sweepTimerHandler;
+  function sweepForMissedText() {
+    try {
+      if (pageLanguageState !== "translated" || !pageIsVisible) return;
+      adoptPieces(getPiecesToTranslate(document.body));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  const MUTATION_OPTIONS = { childList: true, subtree: true, characterData: true };
+  let mutationObserverActive = false;
+
   const mutationObserver = new MutationObserver(function (mutations) {
-    const piecesToTranslate = [];
+    const queue = [];
+    const enqueue = (el) => {
+      if (el && queue.indexOf(el) == -1) queue.push(el);
+    };
 
     mutations.forEach((mutation) => {
+      if (mutation.type === "characterData") {
+        // Le texte d'un nœud existant a changé. Si ce n'est pas nous qui l'avons écrit, c'est la page : à retraduire.
+        const target = mutation.target;
+        if (writtenText.get(target) === target.nodeValue) return;
+        seenTextNodes.delete(target);
+        if (target.parentNode && !isNoTranslateNode(target.parentNode)) enqueue(target.parentNode);
+        return;
+      }
+
       mutation.addedNodes.forEach((addedNode) => {
+        if (addedNode.nodeType !== 1 && addedNode.nodeType !== 3) return;
         const nodeName = addedNode.nodeName.toLowerCase();
-        if (!isNoTranslateNode(addedNode)) {
-          if (htmlTagsInlineText.indexOf(nodeName) == -1) {
-            if (htmlTagsInlineIgnore.indexOf(nodeName) == -1) {
-              piecesToTranslate.push(addedNode);
-            }
-          }
+        if (isNoTranslateNode(addedNode)) return;
+        if (htmlTagsInlineText.indexOf(nodeName) == -1) {
+          if (htmlTagsInlineIgnore.indexOf(nodeName) == -1) enqueue(addedNode);
+        } else if (addedNode.parentNode) {
+          // Texte ou élément en ligne ajouté : avant, il était ignoré. On repart de son parent.
+          enqueue(addedNode.parentNode);
         }
       });
 
@@ -456,27 +495,35 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       });
     });
 
-    piecesToTranslate.forEach((ptt) => {
-      if (newNodes.indexOf(ptt) == -1) {
-        newNodes.push(ptt);
-      }
+    queue.forEach((el) => {
+      if (newNodes.indexOf(el) == -1) newNodes.push(el);
     });
   });
+
+  // Les zones isolées (shadow DOM ouvert) ne sont pas vues par l'observateur de la page : on les surveille une à une.
+  function observeShadowRoot(shadowRoot) {
+    try {
+      if (mutationObserverActive) mutationObserver.observe(shadowRoot, MUTATION_OPTIONS);
+    } catch (e) {
+      /* zone fermée ou déjà observée */
+    }
+  }
 
   function enableMutatinObserver() {
     disableMutatinObserver();
 
     if (twpConfig.get("translateDynamicallyCreatedContent") == "yes") {
       translateNewNodesTimerHandler = setInterval(translateNewNodes, 2000);
-      mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+      sweepTimerHandler = setInterval(sweepForMissedText, 4000);
+      mutationObserverActive = true;
+      mutationObserver.observe(document.body, MUTATION_OPTIONS);
     }
   }
 
   function disableMutatinObserver() {
     clearInterval(translateNewNodesTimerHandler);
+    clearInterval(sweepTimerHandler);
+    mutationObserverActive = false;
     newNodes = [];
     removedNodes = [];
     mutationObserver.disconnect();
@@ -545,6 +592,17 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
+  // Beaucoup d'applications affichent du texte normal (un courriel, des consignes) dans une balise <code> à chasse fixe.
+  // Du vrai code n'est pas traduit ; du texte qui ressemble à des phrases l'est.
+  function isProseCode(el) {
+    if (el.nodeName.toLowerCase() !== "code") return false;
+    const text = el.textContent || "";
+    if (text.length < 20) return false;
+    const words = text.match(/\p{L}{2,}/gu) || [];
+    const symbols = text.match(/[{}();=<>\[\]\\$#*|]/g) || [];
+    return words.length >= 4 && symbols.length / text.length < 0.05;
+  }
+
   function getPiecesToTranslate(root = document.documentElement) {
     const piecesToTranslate = [
       {
@@ -575,7 +633,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
             lastSelectOrDataListElement = node;
 
           if (
-            htmlTagsInlineIgnore.indexOf(nodeName) !== -1 ||
+            (htmlTagsInlineIgnore.indexOf(nodeName) !== -1 && !isProseCode(node)) ||
             isNoTranslateNode(node) ||
             node.classList.contains("notranslate") ||
             node.getAttribute("translate") === "no" ||
@@ -654,6 +712,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
           piecesToTranslate[index].bottomElement = node;
         }
         if (node.shadowRoot) {
+          observeShadowRoot(node.shadowRoot);
           getAllChilds(node.shadowRoot.childNodes);
           if (!piecesToTranslate[index].bottomElement) {
             piecesToTranslate[index].bottomElement = node;
@@ -825,6 +884,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     fontNode.textContent = node.textContent;
 
     node.replaceWith(fontNode);
+    markSeen(fontNode); // le texte qu'il contient est déjà pris en charge : ne pas le renvoyer comme « nouveau »
 
     return fontNode;
   }
@@ -858,6 +918,10 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     } else {
       node.textContent = text;
     }
+
+    markSeen(node);
+    const writtenNode = node.nodeType === 3 ? node : node.firstChild;
+    if (writtenNode && writtenNode.nodeType === 3) writtenText.set(writtenNode, writtenNode.nodeValue);
   }
 
   // Nombre de nouvelles tentatives d'un morceau dont la traduction a échoué (réponse absente ou vide).
@@ -1180,6 +1244,8 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
 
     piecesToTranslate = getPiecesToTranslate();
+    seenTextNodes = new WeakSet();
+    piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((n) => seenTextNodes.add(n)));
     attributesToTranslate = getAttributesToTranslate();
 
     pageLanguageState = "translated";
