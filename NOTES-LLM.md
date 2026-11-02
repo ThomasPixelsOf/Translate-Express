@@ -17,6 +17,10 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 
 Zéro réglage : langue cible au départ = la première langue de l'interface ou des langues préférées du navigateur qui n'est pas l'anglais (un navigateur en « en,fr » donne le français ; s'il n'y a que de l'anglais, l'anglais), puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage) (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
 
+## Vitesse
+
+TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté IA : le modèle choisi automatiquement est un modèle rapide qui ne « réfléchit » pas avant de répondre (ordre de préférence : llama-3.3-70b-versatile, gpt-oss-20b, llama-3.1-8b-instant, puis les modèles raisonneurs) ; les modèles raisonneurs reçoivent le réglage qui coupe la réflexion (retiré tout seul si le fournisseur le refuse) ; lots de 1800 caractères traduits 4 par 4 en parallèle ; une réponse qui dépasse 20 s est réessayée ; une limite de débit annoncée à plus de 6 s fait abandonner tout de suite l'IA, et la page est traduite par Google au lieu d'attendre ; un lot dont la longueur ne correspond pas est coupé en deux moitiés traduites en parallèle. Le menu « Model » de la page de réglage permet de choisir un autre modèle.
+
 ## Plusieurs onglets
 
 L'état « page traduite ou non » est propre à chaque onglet : le titre de l'entrée du menu (« Translate this page to … » ou « Show original page ») est recalculé quand on change d'onglet ou de fenêtre, et un clic agit selon l'état de l'onglet cliqué. Une page qui se recharge redevient « à traduire ». L'état n'est jamais mémorisé dans le service worker : on le demande à l'onglet.

@@ -14,7 +14,8 @@ var twpLlm = (function () {
   };
 
   // Zéro réglage : le fournisseur se reconnaît à la forme de la clé, le modèle se choisit tout seul parmi ceux que le fournisseur propose.
-  const MODELES_GROQ = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
+  // Vitesse d'abord : un modèle qui traduit sans « réfléchir » avant de répondre (les modèles raisonneurs sont en fin de liste).
+  const MODELES_GROQ = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"];
 
   function detecterFournisseur(cle) {
     cle = String(cle || "").trim();
@@ -72,10 +73,19 @@ var twpLlm = (function () {
     return configsConnues.get(cle);
   }
 
-  const MAX_CONCURRENT = 3; // requêtes simultanées vers le fournisseur (les offres gratuites limitent le débit)
-  const MAX_RETRIES = 4; // nouvelles tentatives sur 429 / 5xx
-  const TIMEOUT_MS = 60000;
-  const BATCH_CHARS = 3000; // taille d'un lot ; Google reste à 800
+  const MAX_CONCURRENT = 4; // requêtes simultanées vers le fournisseur
+  const MAX_RETRIES = 3; // nouvelles tentatives sur 429 / 5xx
+  const TIMEOUT_MS = 20000; // une réponse normale arrive en 1 à 3 s : au-delà, on réessaie plutôt que d'attendre
+  const MAX_WAIT_MS = 6000; // limite de débit annoncée plus longue que cela : on abandonne tout de suite (repli sur Google)
+  const BATCH_CHARS = 1800; // taille d'un lot : assez petit pour que plusieurs lots partent en parallèle ; Google reste à 800
+
+  // Réglages qui coupent la « réflexion » des modèles raisonneurs (réponse bien plus rapide). Si le fournisseur les refuse
+  // (erreur 400), on réessaie sans, et on s'en souvient.
+  function reglagesRapides(modele) {
+    if (/gpt-oss/i.test(modele)) return { reasoning_effort: "low" };
+    if (/qwen/i.test(modele)) return { reasoning_effort: "none" };
+    return {};
+  }
 
   const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -133,6 +143,7 @@ var twpLlm = (function () {
       const minuterie = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       let attente = 0;
       try {
+        const modele = await modeleAuto(cfg);
         const res = await fetch(cfg.url, {
           method: "POST",
           signal: ctrl.signal,
@@ -140,12 +151,29 @@ var twpLlm = (function () {
             "Content-Type": "application/json",
             Authorization: "Bearer " + cfg.apiKey,
           },
-          body: JSON.stringify({ model: await modeleAuto(cfg), messages, temperature: 0, stream: false }),
+          body: JSON.stringify({
+            model: modele,
+            messages,
+            temperature: 0,
+            stream: false,
+            ...(cfg._sansReglagesRapides ? {} : reglagesRapides(modele)),
+          }),
         });
         if (res.status === 429 || res.status >= 500) {
           const retryAfter = Number(res.headers.get("retry-after"));
           attente = (retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** essai) + Math.random() * 300;
           derniereErreur = new Error("HTTP " + res.status);
+          if (res.status === 429 && attente > MAX_WAIT_MS) {
+            // Limite de débit longue : attendre bloquerait la page des dizaines de secondes. On abandonne tout de suite,
+            // le service appelant se replie sur le traducteur gratuit.
+            const err = new Error("rate limited (retry in " + Math.round(attente / 1000) + " s)");
+            err.definitive = true;
+            throw err;
+          }
+        } else if (res.status === 400 && !cfg._sansReglagesRapides && Object.keys(reglagesRapides(modele)).length) {
+          cfg._sansReglagesRapides = true;
+          derniereErreur = new Error("HTTP 400 (réglages rapides refusés)");
+          attente = 0;
         } else if (!res.ok) {
           let detail = "";
           try {
@@ -197,11 +225,14 @@ var twpLlm = (function () {
     } catch (e) {
       if (e.definitive) throw e;
     }
-    // Longueur ou format incorrects : on retraduit un texte à la fois.
+    // Longueur ou format incorrects : on coupe le lot en deux et on traduit les moitiés en parallèle (récursif).
     if (textes.length === 1) throw new Error("le modèle n'a pas renvoyé une traduction exploitable");
-    const resultats = [];
-    for (const texte of textes) resultats.push((await traduireLot(cfg, src, tgt, [texte]))[0]);
-    return resultats;
+    const milieu = Math.ceil(textes.length / 2);
+    const [a, b] = await Promise.all([
+      traduireLot(cfg, src, tgt, textes.slice(0, milieu)),
+      traduireLot(cfg, src, tgt, textes.slice(milieu)),
+    ]);
+    return [...a, ...b];
   }
 
   // Découpe la réponse `<pre><a i=0>…</a><a i=1>…</a></pre>` en un tableau de textes, comme le fait le service Google.

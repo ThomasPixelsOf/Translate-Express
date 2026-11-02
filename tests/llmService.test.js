@@ -54,7 +54,7 @@ test("decouperReponse retrouve les morceaux <a i=N>, les remet dans l'ordre et e
 test("le service traduit un lot en une seule requête et envoie la clé uniquement à l'adresse du fournisseur", async () => {
   const service = twpLlm.create(FauxService, Utils, config);
   assert.equal(service.baseURL, "https://api.groq.com/openai/v1/chat/completions");
-  assert.equal(service.maxRequestSize, 3000);
+  assert.equal(service.maxRequestSize, 1800);
   assert.match(service.serviceName, /^llm-un_modele_test_1$/);
   const appels = fauxFetch([{ content: '{"translations":["<pre>Bonjour</pre>","<pre><a i=0>Un</a><a i=1>Deux</a></pre>"]}' }]);
   const rep = await service.makeRequest("en", "fr", [{ originalText: "<pre>Hello</pre>" }, { originalText: "<pre><a i=0>One</a><a i=1>Two</a></pre>" }]);
@@ -67,7 +67,7 @@ test("le service traduit un lot en une seule requête et envoie la clé uniqueme
   assert.deepEqual(service.cbTransformResponse(rep[1], false), ["Un", "Deux"]);
 });
 
-test("longueur incorrecte : le service retraduit les textes un par un", async () => {
+test("longueur incorrecte : le service coupe le lot en deux et traduit les moitiés", async () => {
   const service = twpLlm.create(FauxService, Utils, config);
   const appels = fauxFetch([
     { content: '{"translations":["seulement un"]}' },
@@ -121,7 +121,7 @@ test("sans modèle saisi : Groq choisit le premier modèle préféré disponible
   ]);
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]), ["un"]);
   assert.match(appels[0].url, /\/openai\/v1\/models$/);
-  assert.equal(appels[1].corps.model, "openai/gpt-oss-120b");
+  assert.equal(appels[1].corps.model, "llama-3.3-70b-versatile", "un modèle rapide est préféré aux modèles raisonneurs");
   await service.makeRequest("en", "fr", [{ originalText: "<pre>two</pre>" }]);
   assert.equal(appels.length, 3, "la liste des modèles n'est demandée qu'une fois");
 });
@@ -140,4 +140,39 @@ test("une réponse absente (requête échouée) est une erreur, jamais le texte 
   const { decouperReponse } = twpLlm._test;
   assert.throws(() => decouperReponse(null, false, Utils.unescapeHTML), /translation failed/);
   assert.throws(() => decouperReponse(undefined, false, Utils.unescapeHTML), /translation failed/);
+});
+
+test("un modèle raisonneur reçoit le réglage qui coupe la réflexion ; refusé (400), on réessaie sans et on s'en souvient", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "openai/gpt-oss-20b" });
+  const appels = fauxFetch([
+    { status: 400, json: { error: { message: "unknown parameter reasoning_effort" } } },
+    { content: '{"translations":["un"]}' },
+    { content: '{"translations":["deux"]}' },
+  ]);
+  assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]), ["un"]);
+  assert.equal(appels[0].corps.reasoning_effort, "low");
+  assert.equal(appels[1].corps.reasoning_effort, undefined, "réessayé sans le réglage");
+  await service.makeRequest("en", "fr", [{ originalText: "<pre>two</pre>" }]);
+  assert.equal(appels[2].corps.reasoning_effort, undefined, "le refus est mémorisé");
+});
+
+test("un modèle non raisonneur ne reçoit aucun réglage supplémentaire", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "llama-3.3-70b-versatile" });
+  const appels = fauxFetch([{ content: '{"translations":["un"]}' }]);
+  await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]);
+  assert.equal(appels[0].corps.reasoning_effort, undefined);
+});
+
+test("limite de débit longue : abandon immédiat (pas d'attente de plusieurs dizaines de secondes)", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-limite" });
+  const appels = fauxFetch([{ status: 429, retryAfter: "45" }]);
+  const t0 = Date.now();
+  await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /rate limited/);
+  assert.ok(Date.now() - t0 < 1000, "abandon rapide");
+  assert.equal(appels.length, 1, "aucune nouvelle tentative");
+});
+
+test("lots plus petits (1800 caractères) pour pouvoir partir en parallèle", () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m" });
+  assert.equal(service.maxRequestSize, 1800);
 });
