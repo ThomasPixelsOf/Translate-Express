@@ -12,6 +12,7 @@ const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", 
 
 const MENU = {
   lang: "twp-lang",
+  bubble: "twp-bubble",
   selection: "twp-selection",
   field: "twp-field",
   page: "twp-page",
@@ -43,6 +44,14 @@ function createMenus() {
       documentUrlPatterns: ["http://*/*", "https://*/*", "file://*/*"],
     });
     chrome.contextMenus.create({ id: MENU.composer, title: "Message window (live translation)", contexts: ["all"] });
+
+    chrome.contextMenus.create({
+      id: MENU.bubble,
+      type: "checkbox",
+      checked: twpConfig.get("showTranslateSelectedButton") !== "no",
+      title: "Show a bubble when I select text",
+      contexts: ["all"],
+    });
 
     // Langue cible : une seule pour toute l'extension (page, panneau, fenêtre de message).
     const current = targetLanguage();
@@ -122,6 +131,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     );
   } else if (info.menuItemId === MENU.composer) {
     openDock(tab.id, "composer");
+  } else if (info.menuItemId === MENU.bubble) {
+    twpConfig.set("showTranslateSelectedButton", info.checked ? "yes" : "no");
   } else if (info.menuItemId === MENU.key) {
     openDock(tab.id, "setup");
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {

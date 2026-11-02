@@ -359,6 +359,82 @@
     }
   });
 
+  // ---- bulle sur le texte sélectionné : un clic ouvre le volet avec la traduction ----
+  let bubble = null; // { host, el, timer }
+  const BUBBLE_MIN_CHARS = 2;
+  const BUBBLE_MAX_CHARS = 5000;
+
+  function hideBubble() {
+    if (!bubble) return;
+    clearTimeout(bubble.timer);
+    bubble.host.remove();
+    bubble = null;
+  }
+
+  function selectedPlainText() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    const anchor = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
+    // Pas dans nos propres panneaux ; pas dans un champ de mot de passe.
+    if (anchor && anchor.closest && (anchor.closest("[data-twp-panel],[data-twp-dock],[data-twp-bubble]") || anchor.closest("input[type=password]"))) return null;
+    const text = sel.toString().trim();
+    return text.length >= BUBBLE_MIN_CHARS ? text.slice(0, BUBBLE_MAX_CHARS) : null;
+  }
+
+  function showBubble() {
+    if (twpConfig.get("showTranslateSelectedButton") === "no") return hideBubble();
+    const text = selectedPlainText();
+    if (!text) return hideBubble();
+    const sel = window.getSelection();
+    const rects = sel.getRangeAt(0).getClientRects();
+    const last = rects.length ? rects[rects.length - 1] : sel.getRangeAt(0).getBoundingClientRect();
+    if (!last || (!last.width && !last.height)) return hideBubble();
+    if (!bubble) {
+      const host = document.createElement("div");
+      host.setAttribute("data-twp-bubble", "");
+      host.style.cssText = "all: initial;";
+      const root = host.attachShadow({ mode: "open" });
+      root.innerHTML = `<style>
+        button { position: fixed; z-index: 2147483647; width: 28px; height: 28px; padding: 0; border-radius: 14px; border: 1px solid rgba(0,0,0,.2);
+          background: #0f62fe; color: #fff; cursor: pointer; font: 700 12px/1 system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+        button:hover { background: #0353e9; }
+      </style><button title="Translate the selection" aria-label="Translate the selection">A</button>`;
+      const el = root.querySelector("button");
+      // La sélection doit survivre au clic sur la bulle.
+      el.addEventListener("mousedown", (e) => e.preventDefault());
+      el.addEventListener("click", () => {
+        const current = selectedPlainText() || bubble.text;
+        hideBubble();
+        try { chrome.runtime.sendMessage({ action: "twpOpenComposer", text: current }); } catch (e) {}
+      });
+      document.documentElement.appendChild(host);
+      bubble = { host, el, timer: null, text };
+    }
+    bubble.text = text;
+    const size = 28;
+    bubble.el.style.left = Math.max(4, Math.min(window.innerWidth - size - 4, last.right + 4)) + "px";
+    bubble.el.style.top = Math.max(4, Math.min(window.innerHeight - size - 4, last.bottom + 4)) + "px";
+    clearTimeout(bubble.timer);
+    bubble.timer = setTimeout(hideBubble, 8000); // la bulle s'efface toute seule
+  }
+
+  // On attend la fin du geste (souris relâchée ou touche relâchée) avant d'afficher la bulle.
+  document.addEventListener("mouseup", (e) => {
+    if (e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) return;
+    setTimeout(showBubble, 10);
+  }, true);
+  document.addEventListener("keyup", (e) => {
+    if (e.shiftKey || e.key === "Shift") setTimeout(showBubble, 10);
+  }, true);
+  document.addEventListener("mousedown", (e) => {
+    if (!e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) hideBubble();
+  }, true);
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection();
+    if (bubble && (!sel || sel.isCollapsed)) hideBubble();
+  });
+  window.addEventListener("scroll", () => hideBubble(), true);
+
   // ---- événements ----
   // Le champ visé est celui sur lequel on fait le clic droit (ou qui avait le focus).
   document.addEventListener(

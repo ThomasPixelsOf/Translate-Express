@@ -96,7 +96,7 @@ test("le service worker se charge sans erreur et crée le menu du clic droit", a
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
   const ids = menus.map((m) => m.id);
-  for (const id of ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-lang", "twp-key"]) assert.ok(ids.includes(id), "entrée absente : " + id);
+  for (const id of ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-bubble", "twp-lang", "twp-key"]) assert.ok(ids.includes(id), "entrée absente : " + id);
   assert.ok(ids.includes("twp-lang-en") && ids.includes("twp-lang-fr"), "langues courantes absentes");
   assert.equal(menus.filter((m) => m.type === "radio" && m.checked).length, 1, "une seule langue cochée");
   assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
@@ -141,4 +141,16 @@ test("« Message window » s'ouvre dans un volet de la page, et en fenêtre seul
 
   handlers.onClicked.forEach((f) => f({ menuItemId: "twp-key", frameId: 0 }, { id: 7 }));
   assert.match(etat.windowsCreated.at(-1).url, /setup[/]setup[.]html/);
+});
+
+test("la bulle de sélection est active par défaut et se désactive depuis le menu", async () => {
+  const { sandbox, menus, handlers } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const bulle = () => menus.find((m) => m.id === "twp-bubble");
+  assert.equal(bulle().type, "checkbox");
+  assert.equal(bulle().checked, true);
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-bubble", checked: false, frameId: 0 }, { id: 1 }));
+  assert.equal(vm.runInContext('twpConfig.get("showTranslateSelectedButton")', sandbox), "no");
 });
