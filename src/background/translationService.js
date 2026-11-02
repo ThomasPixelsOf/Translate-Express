@@ -918,25 +918,32 @@ const translationService = (function () {
     // Les échecs précédents ne doivent pas rester en mémoire : sinon la nouvelle tentative du même texte échoue aussitôt.
     serviceList.forEach((s) => s.removeTranslationsWithError && s.removeTranslationsWithError());
 
+    const tDebut = Date.now();
+    const stats = { sent: 0, failed: 0, fallbackOk: 0 };
     const translateWith = async (svc, blocks) => {
       const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults, { priority });
       return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // un service sans réponse = blocs vides
     };
 
     // Pages en plusieurs langues : les blocs déjà dans la langue cible ne sont pas retraduits (voir skipTargetLanguage.js).
-    return await twpSkip.translateSkippingTarget(
+    const resultat = await twpSkip.translateSkippingTarget(
       sourceArray2d,
       targetLanguage,
       async (blocks) => {
+        stats.sent = blocks.length;
         const results = await translateWith(service, blocks);
         if (serviceName === "llm") {
           // Les blocs que l'IA n'a pas pu traduire sont confiés à Google, bloc par bloc (le reste n'est pas refait).
           const failed = results.map((r, i) => (r.length === 0 && blocks[i].length > 0 ? i : -1)).filter((i) => i >= 0);
+          stats.failed = failed.length;
           if (failed.length > 0) {
             try {
               const fallback = await translateWith(googleService, failed.map((i) => blocks[i]));
               failed.forEach((i, k) => {
-                if (fallback[k].length > 0) results[i] = fallback[k];
+                if (fallback[k].length > 0) {
+                  results[i] = fallback[k];
+                  stats.fallbackOk++;
+                }
               });
             } catch (e) {
               console.warn("Free translator also failed:", e);
@@ -948,6 +955,20 @@ const translationService = (function () {
       twpSkip.browserDetect,
       twpLang.fixTLanguageCode,
     );
+    if (typeof twpDiag !== "undefined") {
+      twpDiag.log("html.call", {
+        service: serviceName,
+        priority,
+        blocks: sourceArray2d.length,
+        chars: sourceArray2d.reduce((n, b) => n + b.reduce((m, s) => m + s.length, 0), 0),
+        sentToEngine: stats.sent,
+        skippedAlreadyTarget: sourceArray2d.length - stats.sent,
+        failedBlocks: stats.failed,
+        googleFallbackOk: stats.fallbackOk,
+        ms: Date.now() - tDebut,
+      });
+    }
+    return resultat;
   };
 
   translationService.translateText = async (

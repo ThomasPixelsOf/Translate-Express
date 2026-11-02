@@ -6,6 +6,7 @@ importScripts("/lib/languages.js");
 importScripts("/lib/config.js");
 importScripts("/lib/platformInfo.js");
 importScripts("/lib/i18n.js");
+importScripts("/background/diagnostics.js");
 importScripts("/background/translationCache.js");
 importScripts("/background/llmService.js");
 importScripts("/background/skipTargetLanguage.js");

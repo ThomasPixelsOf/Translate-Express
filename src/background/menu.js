@@ -11,6 +11,7 @@
 const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", "zh-CN", "ar"];
 
 const MENU = {
+  dashboard: "twp-dashboard",
   lang: "twp-lang",
   write: "twp-write",
   bubble: "twp-bubble",
@@ -90,6 +91,8 @@ function createMenus() {
       contexts: ["all"],
     });
 
+    chrome.contextMenus.create({ id: MENU.dashboard, title: "Dashboard (diagnostics)", contexts: ["all", "action"] });
+
     // Deux langues : celle dans laquelle on LIT (pages, texte affiché) et celle dans laquelle on ÉCRIT (texte tapé, traduit
     // pour le destinataire). Elles sont indépendantes : lire en français, écrire en anglais.
     const known = new Set(twpLang.TargetLanguages);
@@ -165,7 +168,22 @@ function openDock(tabId, view, draft) {
   else send();
 }
 
+// Tableau de bord (page d'options) dans un onglet ; s'il est déjà ouvert, on le remet devant. `tabId` = la page à examiner.
+async function openDashboard(tabId) {
+  const base = chrome.runtime.getURL("/dashboard/dashboard.html");
+  const url = base + (tabId ? "?tab=" + tabId : "");
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find((t) => t.url && t.url.startsWith(base));
+  if (existing) {
+    await chrome.tabs.update(existing.id, { active: true, url });
+    if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url });
+  }
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === MENU.dashboard) return openDashboard(tab && tab.id);
   if (!tab) return;
   const frame = { frameId: info.frameId || 0 };
   if (info.menuItemId === MENU.selection) {

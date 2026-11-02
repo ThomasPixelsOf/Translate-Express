@@ -150,6 +150,16 @@ var twpLlm = (function () {
 
   const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Journal de diagnostic (voir diagnostics.js) : sans effet s'il n'est pas chargé ou coupé.
+  const dlog = (type, data) => {
+    try {
+      if (typeof twpDiag !== "undefined") twpDiag.log(type, data);
+    } catch (e) {
+      /* le journal ne doit jamais gêner la traduction */
+    }
+  };
+  let sequenceRequetes = 0;
+
   // File d'attente simple : au plus MAX_CONCURRENT appels en cours, les autres patientent.
   let enCours = 0;
   const fileAttente = [];
@@ -198,10 +208,30 @@ var twpLlm = (function () {
 
   async function appeler(cfg, messages, priorite = "high") {
     let derniereErreur = null;
+    const id = ++sequenceRequetes;
     for (let essai = 0; essai <= MAX_RETRIES; essai++) {
       const modele = await modeleAuto(cfg);
-      const depense = await reserver(estimerJetons(messages, modele), priorite);
+      const estimation = estimerJetons(messages, modele);
+      const tBudget = Date.now();
+      const depense = await reserver(estimation, priorite);
+      const attenteBudgetMs = Date.now() - tBudget; // temps passé à attendre de la place dans le budget de jetons
+      const tCreneau = Date.now();
       await creneau();
+      const attenteCreneauMs = Date.now() - tCreneau; // temps passé à attendre un créneau (4 requêtes en parallèle au plus)
+      const tEnvoi = Date.now();
+      const journaliser = (extra) =>
+        dlog("llm.request", {
+          id,
+          attempt: essai,
+          priority: priorite,
+          model: modele,
+          estTokens: estimation,
+          waitBudgetMs: attenteBudgetMs,
+          waitSlotMs: attenteCreneauMs,
+          ms: Date.now() - tEnvoi, // durée de l'appel réseau lui-même
+          budgetLimit: budget.limite,
+          ...extra,
+        });
       const ctrl = new AbortController();
       const minuterie = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       let attente = 0;
@@ -231,6 +261,7 @@ var twpLlm = (function () {
           derniereErreur = new Error("HTTP " + res.status);
           // Limite atteinte : plus aucune requête ne part avant la fin du délai indiqué.
           if (res.status === 429) budget.bloqueJusqua = Math.max(budget.bloqueJusqua, Date.now() + attente);
+          journaliser({ status: res.status, retryAfterMs: Math.round(attente), abandoned: res.status === 429 && attente > MAX_WAIT_MS });
           if (res.status === 429 && attente > MAX_WAIT_MS) {
             // Limite de débit longue : attendre bloquerait la page des dizaines de secondes. On abandonne tout de suite,
             // le service appelant se replie sur le traducteur gratuit.
@@ -240,6 +271,7 @@ var twpLlm = (function () {
           }
         } else if (res.status === 400 && !cfg._sansReglagesRapides && Object.keys(reglagesRapides(modele)).length) {
           cfg._sansReglagesRapides = true;
+          journaliser({ status: 400, note: "fast settings refused, retrying without" });
           derniereErreur = new Error("HTTP 400 (réglages rapides refusés)");
           attente = 0;
         } else if (!res.ok) {
@@ -247,6 +279,7 @@ var twpLlm = (function () {
           try {
             detail = (await res.json())?.error?.message || "";
           } catch (e) {}
+          journaliser({ status: res.status, error: String(detail).slice(0, 200) });
           // Une erreur 4xx (clé refusée, modèle inconnu...) ne se corrige pas en réessayant.
           const err = new Error("HTTP " + res.status + (detail ? " : " + detail : ""));
           err.definitive = true;
@@ -256,10 +289,12 @@ var twpLlm = (function () {
           const contenu = data?.choices?.[0]?.message?.content;
           if (typeof contenu !== "string") throw new Error("réponse sans contenu");
           if (data?.usage?.total_tokens > 0) depense.jetons = data.usage.total_tokens; // consommation réelle
+          journaliser({ status: 200, tokens: data?.usage?.total_tokens, outChars: contenu.length });
           return contenu;
         }
       } catch (e) {
         if (e.definitive) throw e;
+        journaliser({ status: 0, error: String((e && e.message) || e).slice(0, 200) });
         derniereErreur = e;
         attente = 1000 * 2 ** essai;
       } finally {
@@ -309,6 +344,7 @@ var twpLlm = (function () {
       if (tab.length === textes.length) {
         // Les blocs dont les morceaux ont été fusionnés ou perdus sont retraduits morceau par morceau.
         const aCorriger = tab.map((sortie, i) => (structureValide(textes[i], sortie) ? -1 : i)).filter((i) => i >= 0);
+        if (aCorriger.length) dlog("llm.structure", { invalidBlocks: aCorriger.length, blocks: textes.length });
         await Promise.all(
           aCorriger.map(async (i) => {
             const pieces = extrairePieces(textes[i]);
@@ -323,6 +359,7 @@ var twpLlm = (function () {
     }
     // Longueur ou format incorrects : on coupe le lot en deux et on traduit les moitiés en parallèle (récursif).
     if (textes.length === 1) throw new Error("le modèle n'a pas renvoyé une traduction exploitable");
+    dlog("llm.split", { size: textes.length });
     const milieu = Math.ceil(textes.length / 2);
     const [a, b] = await Promise.all([
       traduireLot(cfg, src, tgt, textes.slice(0, milieu), priorite),

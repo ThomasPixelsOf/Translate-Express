@@ -45,6 +45,10 @@
       ]
     }
   ],
+  "options_ui": {
+    "page": "dashboard/dashboard.html",
+    "open_in_tab": true
+  },
   "background": {
     "service_worker": "bg.js"
   }

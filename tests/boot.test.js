@@ -96,8 +96,11 @@ test("le manifeste est valide et ne référence que des fichiers qui existent", 
   assert.match(m.version, /^1[.][0-9]+[.][0-9]+$/, "numérotation propre à l'extension, distincte de celle de TWP");
   assert.equal(m.background.service_worker, "bg.js");
   const fichiers = [
+    m.background.service_worker,
     ...Object.values(m.icons),
     ...m.content_scripts.flatMap((c) => c.js),
+    ...(m.options_ui ? [m.options_ui.page] : []), // une page d'options absente empêche toute l'extension de se charger
+    ...(m.action && m.action.default_popup ? [m.action.default_popup] : []),
   ];
   for (const f of fichiers) assert.ok(fs.existsSync(path.join(SRC, f)), "référencé mais absent : " + f);
   assert.deepEqual(m.permissions.sort(), ["alarms", "contextMenus", "storage"]);
