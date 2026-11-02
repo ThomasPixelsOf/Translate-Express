@@ -87,7 +87,7 @@ const twpConfig = (function () {
     // @ts-ignore
     config[name] = value;
     const obj = {};
-    obj[name] = toObjectOrArrayIfTypeIsMapOrSet(value);
+    obj[name] = value;
     chrome.storage.local.set(obj);
     observers.forEach((callback) => callback(name, value));
   };
@@ -108,7 +108,7 @@ const twpConfig = (function () {
           if (inWebPage && SECRET_KEYS.includes(name)) continue;
           const newValue = changes[name].newValue;
           if (config[name] !== newValue) {
-            config[name] = fixObjectType(name, newValue);
+            config[name] = newValue;
             observers.forEach((callback) => callback(name, newValue));
           }
         }
@@ -121,52 +121,13 @@ const twpConfig = (function () {
   const wanted = inWebPage ? Object.keys(defaultConfig).filter((k) => !SECRET_KEYS.includes(k)) : null;
   chrome.storage.local.get(wanted, (onGot) => {
     for (const name in onGot) {
-      config[name] = fixObjectType(name, onGot[name]);
+      config[name] = onGot[name];
     }
 
     // Target language: a valid one chosen by the user is always kept; only a missing or invalid one is replaced by the default.
     config.targetLanguage = twpLang.fixTLanguageCode(config.targetLanguage) || defaultConfig.targetLanguage;
     readyConfig();
   });
-
-  /**
-   * convert object to map or set if necessary, otherwise return the value itself
-   * @example
-   * fixObjectType("customDictionary", {})
-   * // returns Map
-   * @param {string} key
-   * @param {*} value
-   * @returns {Map | Set | *}
-   */
-  function fixObjectType(key, value) {
-    if (defaultConfig[key] instanceof Map) {
-      return new Map(Object.entries(value));
-    } else if (defaultConfig[key] instanceof Set) {
-      return new Set(value);
-    } else {
-      return value;
-    }
-  }
-
-  /**
-   * convert map and set to object and array respectively, otherwise return the value itself
-   * @example
-   * toObjectOrArrayIfTypeIsMapOrSet(new Map())
-   * // returns {}
-   * toObjectOrArrayIfTypeIsMapOrSet({})
-   * // returns {}
-   * @param {Map | Set | *} value
-   * @returns {Object | Array | *}
-   */
-  function toObjectOrArrayIfTypeIsMapOrSet(value) {
-    if (value instanceof Map) {
-      return Object.fromEntries(value);
-    } else if (value instanceof Set) {
-      return Array.from(value);
-    } else {
-      return value;
-    }
-  }
 
   return twpConfig;
 })();

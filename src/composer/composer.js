@@ -100,7 +100,6 @@
     fillLanguages($("#source"), true);
     fillLanguages($("#target"), false);
     $("#source").value = remembered(KEY_SOURCE, "auto");
-    const ui = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
     // The message window is for writing: its target language is the writing language.
     $("#target").value = twpConfig.get("writeLanguage") || "en";
     $("#tone").value = remembered(KEY_TONE, "");

@@ -215,8 +215,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (sender.tab && sender.tab.active && (sender.frameId === 0 || sender.frameId === undefined)) {
       updatePageMenuTitle(request.pageLanguageState === "translated" ? "translated" : "original");
     }
-  } else if (request.action === "thisFrameIsInFocus") {
-    chrome.tabs.sendMessage(sender.tab.id, { action: "anotherFrameIsInFocus" }, checkedLastError);
   } else if (request.action === "twpFramePanel") {
     // A frame of the page selected text: the panel is shown by the top page of the tab (so no frame edge can clip it).
     const { action, ...payload } = request;
