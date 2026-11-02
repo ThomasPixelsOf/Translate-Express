@@ -435,7 +435,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
-  const stuckMs = () => Number(twpConfig.get("diagStuckMs")) || 45000; // un envoi sans réponse au-delà est considéré bloqué
+  const stuckMs = () => Number(twpConfig.get("diagStuckMs")) || 90000; // un envoi sans réponse au-delà est considéré bloqué
 
   function elementPath(el) {
     const parts = [];

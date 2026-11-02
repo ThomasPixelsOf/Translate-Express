@@ -296,3 +296,19 @@ test("priorité : sans concurrence, une requête du reste de la page part normal
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }], { priority: "low" }), ["un"]);
   assert.equal(appels.length, 1);
 });
+
+test("budget saturé : une requête qui attendrait trop longtemps échoue tout de suite (repli sur Google) au lieu de patienter", async () => {
+  twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 700 });
+  try {
+    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-saturé" });
+    const texte = "<pre>" + "mot ".repeat(150) + "</pre>";
+    const appels = fauxFetch([{ content: '{"translations":["ok"]}' }]);
+    await service.makeRequest("en", "fr", [{ originalText: texte }]); // la première passe et remplit le budget
+    const t0 = Date.now();
+    await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: texte }], { priority: "low" }), /budget saturated/);
+    assert.ok(Date.now() - t0 < 500, "échec immédiat : " + (Date.now() - t0) + " ms");
+    assert.equal(appels.length, 1, "aucune requête de plus envoyée à Groq");
+  } finally {
+    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+  }
+});

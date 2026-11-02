@@ -76,6 +76,9 @@ var twpLlm = (function () {
   const MAX_CONCURRENT = 4; // requêtes simultanées vers le fournisseur
   const MAX_RETRIES = 3; // nouvelles tentatives sur 429 / 5xx
   const TIMEOUT_MS = 20000; // une réponse normale arrive en 1 à 3 s : au-delà, on réessaie plutôt que d'attendre
+  // Attente tolérée pour la place dans le budget de jetons : au-delà, le bloc part chez Google (gratuit, sans limite)
+  // plutôt que d'attendre Groq. Le texte visible patiente plus longtemps (meilleure qualité) que celui du fond.
+  const BUDGET_MAX_WAIT = { haute: 12000, basse: 2500 };
   const MAX_WAIT_MS = 40000; // limite de débit annoncée plus longue (quota du jour par exemple) : on abandonne (repli sur Google)
   const BATCH_CHARS = 1800; // taille d'un lot : assez petit pour que plusieurs lots partent en parallèle ; Google reste à 800
 
@@ -110,6 +113,17 @@ var twpLlm = (function () {
     }
   }
 
+  // Temps avant que la fenêtre glissante ait assez de place pour `jetons` (les dépenses les plus anciennes expirent d'abord).
+  function attenteEstimee(jetons, maintenant) {
+    let total = jetonsUtilises(maintenant);
+    for (const d of budget.depenses) {
+      if (total + jetons <= budget.limite) break;
+      total -= d.jetons;
+      if (total + jetons <= budget.limite) return Math.max(0, d.t + budget.fenetreMs - maintenant);
+    }
+    return 0;
+  }
+
   async function reserverBudget(jetons, haute) {
     for (;;) {
       const maintenant = Date.now();
@@ -134,6 +148,13 @@ var twpLlm = (function () {
         const entree = { t: maintenant, jetons };
         budget.depenses.push(entree);
         return entree;
+      }
+      const attenteMs = attenteEstimee(jetons, maintenant);
+      if (attenteMs > (haute ? BUDGET_MAX_WAIT.haute : BUDGET_MAX_WAIT.basse)) {
+        dlog("llm.budget-skip", { waitMs: attenteMs, priority: haute ? "high" : "low", estTokens: jetons });
+        const err = new Error("token budget saturated (would wait " + Math.round(attenteMs / 1000) + " s)");
+        err.definitive = true;
+        throw err;
       }
       const plusAncienne = budget.depenses[0];
       await attendre(Math.max(50, Math.min(plusAncienne.t + budget.fenetreMs - maintenant + 20, 2000)));
