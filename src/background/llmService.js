@@ -97,7 +97,20 @@ var twpLlm = (function () {
     return Math.ceil(entree + texte * 1.3 + (/gpt-oss|qwen/i.test(modele) ? 250 : 40));
   }
 
-  async function reserver(jetons) {
+  // Nombre de requêtes prioritaires (ce qui est à l'écran) en attente de budget : celles du reste de la page attendent.
+  let hautesEnAttente = 0;
+
+  async function reserver(jetons, priorite = "high") {
+    const haute = priorite !== "low";
+    if (haute) hautesEnAttente++;
+    try {
+      return await reserverBudget(jetons, haute);
+    } finally {
+      if (haute) hautesEnAttente--;
+    }
+  }
+
+  async function reserverBudget(jetons, haute) {
     for (;;) {
       const maintenant = Date.now();
       if (maintenant < budget.bloqueJusqua) {
@@ -109,6 +122,10 @@ var twpLlm = (function () {
           throw err;
         }
         await attendre(Math.min(budget.bloqueJusqua - maintenant, 2000));
+        continue;
+      }
+      if (!haute && hautesEnAttente > 0) {
+        await attendre(100); // le reste de la page cède la place à ce qui est visible
         continue;
       }
       const deja = jetonsUtilises(maintenant);
@@ -179,11 +196,11 @@ var twpLlm = (function () {
     return tab;
   }
 
-  async function appeler(cfg, messages) {
+  async function appeler(cfg, messages, priorite = "high") {
     let derniereErreur = null;
     for (let essai = 0; essai <= MAX_RETRIES; essai++) {
       const modele = await modeleAuto(cfg);
-      const depense = await reserver(estimerJetons(messages, modele));
+      const depense = await reserver(estimerJetons(messages, modele), priorite);
       await creneau();
       const ctrl = new AbortController();
       const minuterie = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -282,20 +299,20 @@ var twpLlm = (function () {
     return Array.from(pieces, (p) => p ?? "");
   }
 
-  async function traduireLot(cfg, src, tgt, textes) {
+  async function traduireLot(cfg, src, tgt, textes, priorite = "high") {
     const messages = [
       { role: "system", content: consigne(src, tgt) },
       { role: "user", content: JSON.stringify(textes) },
     ];
     try {
-      const tab = extraireTableau(await appeler(cfg, messages));
+      const tab = extraireTableau(await appeler(cfg, messages, priorite));
       if (tab.length === textes.length) {
         // Les blocs dont les morceaux ont été fusionnés ou perdus sont retraduits morceau par morceau.
         const aCorriger = tab.map((sortie, i) => (structureValide(textes[i], sortie) ? -1 : i)).filter((i) => i >= 0);
         await Promise.all(
           aCorriger.map(async (i) => {
             const pieces = extrairePieces(textes[i]);
-            const traduites = await traduireLot(cfg, src, tgt, pieces.map((p) => "<pre>" + p + "</pre>"));
+            const traduites = await traduireLot(cfg, src, tgt, pieces.map((p) => "<pre>" + p + "</pre>"), priorite);
             tab[i] = "<pre>" + traduites.map((x, k) => "<a i=" + k + ">" + String(x).replace(/^<pre>|<\/pre>$/g, "") + "</a>").join("") + "</pre>";
           }),
         );
@@ -308,8 +325,8 @@ var twpLlm = (function () {
     if (textes.length === 1) throw new Error("le modèle n'a pas renvoyé une traduction exploitable");
     const milieu = Math.ceil(textes.length / 2);
     const [a, b] = await Promise.all([
-      traduireLot(cfg, src, tgt, textes.slice(0, milieu)),
-      traduireLot(cfg, src, tgt, textes.slice(milieu)),
+      traduireLot(cfg, src, tgt, textes.slice(0, milieu), priorite),
+      traduireLot(cfg, src, tgt, textes.slice(milieu), priorite),
     ]);
     return [...a, ...b];
   }
@@ -366,13 +383,14 @@ var twpLlm = (function () {
         this.maxRequestSize = BATCH_CHARS;
       }
 
-      async makeRequest(sourceLanguage, targetLanguage, requests) {
+      async makeRequest(sourceLanguage, targetLanguage, requests, options = {}) {
         if (!cfg.apiKey || !cfg.url) throw new Error("service LLM non configuré (clé manquante)");
         return await traduireLot(
           cfg,
           sourceLanguage,
           targetLanguage,
           requests.map((info) => info.originalText),
+          options && options.priority === "low" ? "low" : "high",
         );
       }
     })();

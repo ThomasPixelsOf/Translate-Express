@@ -28,11 +28,13 @@ function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = 
   const w = dom.window;
   w.eval(`Object.defineProperty(window, "innerHeight", { value: 600, configurable: true });`);
   w.HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.hasAttribute("data-hidden")) return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }; // masqué (display:none)
     const top = Number(this.getAttribute("data-top") || 0), bottom = Number(this.getAttribute("data-bottom") || 0);
     return { top, bottom, left: 0, right: 100, width: 100, height: bottom - top };
   };
 
   const demandes = []; // une entrée par appel « translateHTML »
+  const priorites = []; // priorité de chaque appel : « high » (visible) ou « low » (reste de la page)
   let echecsRestants = echecsAvantSucces;
   let tronquer = tronquerPremiereReponse;
   const ecouteurs = [];
@@ -47,6 +49,7 @@ function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = 
         const repondre = (r) => cb && setTimeout(() => cb(r), 0);
         if (m.action === "translateHTML") {
           demandes.push(m.sourceArray2d.map((b) => b.join(" ")));
+          priorites.push(m.priority);
           if (echecsRestants > 0) { echecsRestants--; return repondre(undefined); } // le moteur échoue
           if (tronquer && m.sourceArray2d.some((b) => b.length > 1)) {
             // Le moteur ne renvoie que le premier morceau de chaque bloc : les suivants restent à traduire.
@@ -78,12 +81,12 @@ function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = 
   w.eval([lire("contentScript/showOriginal.js"), lire("contentScript/pageTranslator.js")].join(String.fromCharCode(10)));
   const envoyer = (m) => ecouteurs.forEach((f) => f(m, {}, () => {}));
   const texte = (id) => w.document.getElementById(id).textContent;
-  return { w, demandes, envoyer, texte };
+  return { w, demandes, priorites, envoyer, texte };
 }
 
 const ignorer = JSDOM ? false : "jsdom introuvable";
 
-test("page simulée : le texte à l'écran, sous l'écran et un bloc plus haut que l'écran sont traduits ; le texte très éloigné attend", { skip: ignorer, timeout: 20000 }, async () => {
+test("page simulée : le texte à l'écran, sous l'écran et un bloc plus haut que l'écran sont traduits ; le texte très éloigné est traduit ensuite", { skip: ignorer, timeout: 30000 }, async () => {
   const page = creerPage();
   const fermer = () => page.w.close();
   try {
@@ -93,7 +96,9 @@ test("page simulée : le texte à l'écran, sous l'écran et un bloc plus haut q
   for (const id of ["p1", "p2", "p3"]) assert.match(page.texte(id), /^\[fr\]/, id + " (à l'écran) doit être traduit");
   assert.match(page.texte("p4"), /^\[fr\]/, "p4 (juste sous l'écran) est prélu");
   assert.match(page.texte("gros"), /^\[fr\]/, "un bloc plus haut que l'écran était ignoré avant la correction");
-  assert.doesNotMatch(page.texte("p5"), /^\[fr\]/, "p5 est très loin : traduit seulement quand on s'en approche");
+  assert.doesNotMatch(page.texte("p5"), /^\[fr\]/, "p5 est très loin : pas traduit dans l'immédiat (le visible passe d'abord)");
+    await attendre(5000);
+    assert.match(page.texte("p5"), /^\[fr\]/, "mais il est traduit ensuite, en tâche de fond, sans qu'il faille défiler");
   } finally { fermer(); }
 });
 
@@ -245,5 +250,51 @@ test("réponse tronquée : les morceaux d'un même bloc restés sans traduction 
     await attendre(4500); // réessai des morceaux manquants
     assert.match(page.texte("mix"), /\[fr\] bold part/, "morceau du milieu traduit après le réessai");
     assert.match(page.texte("mix"), /\[fr\]\s+and the final words/, "la fin est traduite après le réessai");
+  } finally { page.w.close(); }
+});
+
+test("priorité : le visible est envoyé d'abord (high), puis le reste du plus proche au plus lointain (low), le masqué en dernier ; rien n'est ignoré", { skip: ignorer, timeout: 40000 }, async () => {
+  const page = creerPage();
+  try {
+    const doc = page.w.document;
+    // trois paragraphes hors écran, ajoutés dans le désordre : le plus lointain d'abord, puis un masqué, puis le plus proche
+    doc.body.insertAdjacentHTML("beforeend",
+      '<p id="loin2" data-top="9000" data-bottom="9040">Far away paragraph number two.</p>' +
+      '<p id="cache" data-hidden="1">Hidden paragraph inside an inactive tab.</p>' +
+      '<p id="loin1" data-top="2500" data-bottom="2540">Closer paragraph number one.</p>');
+    await attendre(150);
+    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await attendre(9000);
+    // 1) la première demande est celle du visible, en haute priorité
+    assert.equal(page.priorites[0], "high");
+    assert.ok(page.demandes[0].some((s) => /numero p1/.test(s)), "le visible part en premier");
+    // 2) le reste part ensuite en priorité basse, dans l'ordre : proche, lointain, masqué
+    const bas = [];
+    page.demandes.forEach((d, i) => { if (page.priorites[i] === "low") d.forEach((s) => bas.push(s)); });
+    const rang = (mot) => bas.findIndex((s) => s.includes(mot));
+    assert.ok(rang("Closer paragraph") >= 0 && rang("Far away") >= 0 && rang("Hidden paragraph") >= 0, "tout est traduit en tâche de fond : " + JSON.stringify(bas));
+    assert.ok(rang("Closer paragraph") < rang("Far away"), "le plus proche de l'écran d'abord");
+    assert.ok(rang("Far away") < rang("Hidden paragraph"), "le masqué en dernier");
+    // 3) rien n'est resté en version originale
+    for (const id of ["p1", "p5", "loin1", "loin2", "cache"]) assert.match(page.texte(id), /^\[fr\]/, id + " finit traduit");
+  } finally { page.w.close(); }
+});
+
+test("priorité : quand on défile vers un texte en attente, il passe tout de suite en priorité haute", { skip: ignorer, timeout: 40000 }, async () => {
+  const page = creerPage();
+  try {
+    const doc = page.w.document;
+    doc.body.insertAdjacentHTML("beforeend", '<p id="suite" data-top="4000" data-bottom="4040">Paragraph that will be scrolled into view.</p>');
+    await attendre(150);
+    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await attendre(700); // le visible est parti ; « suite » attend (très loin, pas encore en tâche de fond)
+    assert.doesNotMatch(page.texte("suite"), /^\[fr\]/);
+    // L'utilisateur défile : le paragraphe arrive à l'écran.
+    doc.getElementById("suite").setAttribute("data-top", "200");
+    doc.getElementById("suite").setAttribute("data-bottom", "240");
+    await attendre(900);
+    assert.match(page.texte("suite"), /^\[fr\]/, "traduit rapidement une fois visible");
+    const i = page.demandes.findIndex((d) => d.some((s) => /scrolled into view/.test(s)));
+    assert.equal(page.priorites[i], "high", "un texte qui devient visible est traité en priorité haute");
   } finally { page.w.close(); }
 });

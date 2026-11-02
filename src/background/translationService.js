@@ -534,6 +534,7 @@ const translationService = (function () {
       sourceArray2d,
       dontSaveInPersistentCache = false,
       dontSortResults = false,
+      options = {},
     ) {
       const [requests, currentTranslationsInProgress] = await this.getRequests(
         sourceLanguage,
@@ -545,7 +546,7 @@ const translationService = (function () {
 
       for (const request of requests) {
         promises.push(
-          this.makeRequest(sourceLanguage, targetLanguage, request)
+          this.makeRequest(sourceLanguage, targetLanguage, request, options)
             .then((response) => {
               const results = this.cbParseResponse(response);
               for (const idx in request) {
@@ -838,6 +839,7 @@ const translationService = (function () {
       sourceArray2d,
       dontSaveInPersistentCache,
       dontSortResults = false,
+      options = {},
     ) {
       /** @type {{search: string, replace: string}[]} */
       const replacements = [
@@ -868,6 +870,7 @@ const translationService = (function () {
         sourceArray2d,
         dontSaveInPersistentCache,
         dontSortResults,
+        options,
       );
     }
   })();
@@ -904,6 +907,7 @@ const translationService = (function () {
     sourceArray2d,
     dontSaveInPersistentCache = false,
     dontSortResults = false,
+    priority = "high",
   ) => {
     serviceName = twpLang.getAlternativeService(
       targetLanguage,
@@ -915,7 +919,7 @@ const translationService = (function () {
     serviceList.forEach((s) => s.removeTranslationsWithError && s.removeTranslationsWithError());
 
     const translateWith = async (svc, blocks) => {
-      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults);
+      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults, { priority });
       return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // un service sans réponse = blocs vides
     };
 
@@ -1010,6 +1014,7 @@ const translationService = (function () {
           request.sourceArray2d,
           dontSaveInPersistentCache,
           request.dontSortResults,
+          request.priority,
         )
         // Repli : si l'IA échoue (clé refusée, limite de débit, panne), la page est traduite par Google plutôt que de rester vide.
         .catch((e) => {
@@ -1022,6 +1027,7 @@ const translationService = (function () {
             request.sourceArray2d,
             dontSaveInPersistentCache,
             request.dontSortResults,
+            request.priority,
           );
         })
         .then((results) => sendResponse(results))

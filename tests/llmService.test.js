@@ -15,6 +15,7 @@ const Utils = {
   escapeHTML: (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
   unescapeHTML: (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
 };
+const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 twpLlm._test.configurerBudget({ limite: 1e9 });
 const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "un-modele/test-1" };
 
@@ -266,4 +267,32 @@ test("limite longue (quota du jour) : les requêtes suivantes échouent tout de 
   assert.ok(Date.now() - t0 < 300, "échec immédiat");
   assert.equal(appels.length, 1, "aucune requête envoyée pendant le blocage");
   twpLlm._test.configurerBudget({ limite: 1e9 });
+});
+
+test("priorité : une requête du reste de la page (low) cède la place à une requête de ce qui est visible (high)", async () => {
+  twpLlm._test.configurerBudget({ fenetreMs: 400, limite: 700 }); // une seule requête de ~560 jetons par fenêtre
+  try {
+    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-priorite" });
+    const bloc = (marque) => "<pre>" + marque + " " + "mot ".repeat(150) + "</pre>";
+    const appels = fauxFetch(["A", "B", "C", "D"].map(() => ({ content: '{"translations":["ok"]}' })));
+    const envoyer = (marque, priorite) => service.makeRequest("en", "fr", [{ originalText: bloc(marque) }], { priority: priorite });
+    const a = envoyer("A", "high"); // part tout de suite
+    await attendre(20);
+    const suite = [envoyer("B", "low"), envoyer("C", "low")]; // arrivent AVANT D mais attendent
+    await attendre(20);
+    const d = envoyer("D", "high"); // arrive en dernier mais passe devant B et C
+    await Promise.all([a, d, ...suite]);
+    const ordre = appels.map((x) => JSON.parse(x.corps.messages[1].content)[0].slice(5, 6));
+    assert.deepEqual(ordre, ["A", "D", "B", "C"], "ce qui est visible passe devant le reste de la page : " + ordre.join(""));
+  } finally {
+    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+  }
+});
+
+test("priorité : sans concurrence, une requête du reste de la page part normalement (rien n'est ignoré)", async () => {
+  twpLlm._test.configurerBudget({ limite: 1e9 });
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-fond" });
+  const appels = fauxFetch([{ content: '{"translations":["un"]}' }]);
+  assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }], { priority: "low" }), ["un"]);
+  assert.equal(appels.length, 1);
 });

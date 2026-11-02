@@ -21,6 +21,15 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 
 Zéro réglage : langue cible par défaut = le français, puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
 
+## Priorités : le visible d'abord, le reste ensuite (rien n'est ignoré)
+
+Deux niveaux de priorité, de la page jusqu'à la file d'attente de l'IA :
+
+- **Haute** : ce qui est à l'écran et trois quarts d'écran en dessous. Envoyé tout de suite ; quand on défile, un texte qui devient visible passe aussitôt en haute priorité.
+- **Basse** : tout le reste de la page (en dessous, au-dessus, masqué dans un onglet inactif). Traduit en tâche de fond par lots de 1 500 caractères, du plus proche de l'écran au plus lointain, le masqué en dernier, seulement quand rien de nouveau n'arrive à l'écran depuis 1,2 s et sans jamais retarder le visible : dans la file de l'IA, une requête de fond cède la place à toute requête visible en attente de budget. La page finit donc entièrement traduite, même sans défiler.
+
+Avant, le reste de la page n'était traduit que lorsqu'on défilait jusqu'à lui, et toutes les requêtes passaient dans l'ordre d'arrivée.
+
 ## Limites de Groq : budget de jetons par minute
 
 L'offre gratuite limite les jetons par minute (environ 8 000 pour gpt-oss-20b, plus pour d'autres modèles) et les requêtes par minute (30). Une page traduite d'un coup dépasse la limite : les requêtes sont refusées (erreur 429) et la page reste à moitié traduite. L'extension compte donc ce que chaque requête coûte (estimation, corrigée par la consommation réelle renvoyée par Groq), ne l'envoie que si la minute glissante a la place, et lit la limite réelle dans les en-têtes de réponse (85 % de la valeur annoncée ; 6 000 par prudence avant la première réponse). La page se traduit donc par vagues, sans erreur. Sur une erreur 429 de quelques secondes, l'extension attend le délai indiqué ; au-delà de 40 s (quota du jour), elle abandonne tout de suite et la page est traduite par Google. La consigne envoyée à chaque requête est courte, pour ne pas gaspiller de jetons.

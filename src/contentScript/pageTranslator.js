@@ -246,7 +246,8 @@ function backgroundTranslateHTML(
   sourceLanguage,
   targetLanguage,
   sourceArray2d,
-  dontSortResults
+  dontSortResults,
+  priority = "high"
 ) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
@@ -257,6 +258,7 @@ function backgroundTranslateHTML(
         targetLanguage,
         sourceArray2d,
         dontSortResults,
+        priority,
       },
       (response) => {
         checkedLastError();
@@ -1070,6 +1072,76 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
+  // ---- Priorités : ce qui est visible d'abord, le reste de la page ensuite ----
+  // « high » : ce qui est à l'écran (et un peu en dessous) ; envoyé tout de suite, passe devant dans la file de l'IA.
+  // « low »  : tout le reste de la page (en dessous, au-dessus, masqué) ; traduit en tâche de fond, du plus proche de
+  //            l'écran au plus lointain, seulement quand rien de nouveau n'arrive à l'écran. Rien n'est ignoré :
+  //            la page finit entièrement traduite, même sans défiler.
+  let highInFlight = 0;
+  let lastHighSentAt = 0;
+  let lowInFlight = false;
+  const LOW_IDLE_MS = 1200; // délai sans nouveauté à l'écran avant de s'occuper du reste
+  const LOW_BATCH_CHARS = 1500; // taille d'un lot de fond (un lot à la fois)
+
+  function sendPieces(piecesNow, priority, currentFooCount) {
+    if (priority === "high") {
+      highInFlight++;
+      lastHighSentAt = Date.now();
+    } else {
+      lowInFlight = true;
+    }
+    backgroundTranslateHTML(
+      currentPageTranslatorService,
+      currentSourceLanguage,
+      currentTargetLanguage,
+      piecesNow.map((ptt) =>
+        ptt.nodes.map((node) => filterKeywordsInText(node.textContent, customDictionary, currentPageTranslatorService))
+      ),
+      dontSortResults,
+      priority
+    )
+      .then((results) => {
+        if (pageLanguageState === "translated" && currentFooCount === fooCount) {
+          scheduleRetryOfFailedPieces(piecesNow, results);
+          retryNodesWithoutTranslation(piecesNow, results);
+          translateResults(piecesNow, results);
+        }
+      })
+      .finally(() => {
+        if (priority === "high") highInFlight--;
+        else lowInFlight = false;
+      });
+  }
+
+  // Distance d'un morceau à la zone visible (0 = visible, grand = loin ; masqué = en dernier).
+  function distanceToScreen(ptt) {
+    const el = ptt.topElement || ptt.bottomElement;
+    if (!el || !el.getBoundingClientRect) return 1e9;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return 1e9; // masqué (onglet inactif, display:none) : tout à la fin
+    if (r.top > window.innerHeight) return r.top - window.innerHeight;
+    if (r.bottom < 0) return -r.bottom;
+    return 0;
+  }
+
+  // Le prochain lot du reste de la page : les morceaux non traduits les plus proches de l'écran.
+  function pickBackgroundPieces() {
+    const now = Date.now();
+    const candidates = piecesToTranslate
+      .filter((ptt) => !ptt.isTranslated && !(ptt.retryAt > now))
+      .map((ptt) => ({ ptt, distance: distanceToScreen(ptt) }))
+      .sort((a, b) => a.distance - b.distance);
+    const batch = [];
+    let chars = 0;
+    for (const { ptt } of candidates) {
+      batch.push(ptt);
+      chars += ptt.nodes.reduce((sum, n) => sum + n.textContent.length, 0);
+      if (chars >= LOW_BATCH_CHARS) break;
+    }
+    batch.forEach((ptt) => (ptt.isTranslated = true));
+    return batch;
+  }
+
   function translationRoutine() {
     try {
       if (piecesToTranslate && pageIsVisible) {
@@ -1153,30 +1225,11 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
           });
 
           if (piecesToTranslateNow.length > 0) {
-            backgroundTranslateHTML(
-              currentPageTranslatorService,
-              currentSourceLanguage,
-              currentTargetLanguage,
-              piecesToTranslateNow.map((ptt) =>
-                ptt.nodes.map((node) =>
-                  filterKeywordsInText(
-                    node.textContent,
-                    customDictionary,
-                    currentPageTranslatorService
-                  )
-                )
-              ),
-              dontSortResults
-            ).then((results) => {
-              if (
-                pageLanguageState === "translated" &&
-                currentFooCount === fooCount
-              ) {
-                scheduleRetryOfFailedPieces(piecesToTranslateNow, results);
-                retryNodesWithoutTranslation(piecesToTranslateNow, results);
-                translateResults(piecesToTranslateNow, results);
-              }
-            });
+            sendPieces(piecesToTranslateNow, "high", currentFooCount);
+          } else if (highInFlight === 0 && !lowInFlight && Date.now() - lastHighSentAt > LOW_IDLE_MS) {
+            // Rien de nouveau à l'écran : on avance sur le reste de la page, du plus proche au plus lointain.
+            const backgroundPieces = pickBackgroundPieces();
+            if (backgroundPieces.length > 0) sendPieces(backgroundPieces, "low", currentFooCount);
           }
 
           if (attributesToTranslateNow.length > 0) {
