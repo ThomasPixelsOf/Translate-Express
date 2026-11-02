@@ -1,6 +1,5 @@
 {
   "manifest_version": 3,
-  "default_locale": "en",
   "name": "Translate Express",
   "description": "Translate pages, selected text and what you write, from the right-click menu. AI translation with your Groq key.",
   "version": "1.0.0",
@@ -18,7 +17,7 @@
   "permissions": ["storage", "contextMenus", "alarms"],
   "web_accessible_resources": [
     {
-      "resources": ["/contentScript/css/*", "/_locales/*", "/icons/*"],
+      "resources": ["/contentScript/css/*", "/icons/*"],
       "matches": ["<all_urls>"]
     }
   ],
@@ -41,7 +40,9 @@
       "all_frames": true,
       "match_about_blank": true,
       "js": [
-        "/lib/i18n.js",
+        "/lib/ui-text.js",
+        "/lib/ui/en.js",
+        "/lib/ui/fr.js",
         "/contentScript/showOriginal.js",
         "/contentScript/pageTranslator.js",
         "/contentScript/panel.js"

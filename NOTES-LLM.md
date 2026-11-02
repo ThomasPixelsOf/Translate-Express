@@ -103,13 +103,19 @@ What is done (all covered by `tests/security.test.js` and `tests/llmService.test
 
 What is not done, and why: the key is stored in clear in the browser profile. An extension cannot protect a secret from someone who has access to the profile or from malware on the machine: encrypting it would need a key stored next to it (obfuscation, not security) or a passphrase typed at every browser start. Use a dedicated Groq key that you can revoke from Groq's console.
 
+## Interface language
+
+The extension's own texts (right-click menu, popup, panel next to the selection, message view, settings, dashboard labels) are available in English and French, chosen in **Settings, Interface language**: "Browser language (default)" follows the browser when the language is available and falls back to English; any other choice applies right away to the popup, the menu and the panel. The findings and the copied report of the dashboard stay in English (they are technical).
+
+How it works: `src/lib/ui-text.js` gives `twpUi.t("key", ...)` and fills `data-ui*` attributes in the pages; each language is a plain script `src/lib/ui/<code>.js` that registers its texts, loaded in the service worker, the content scripts and the popup pages (no file is fetched, so it works on pages with a strict Content Security Policy). **To add a language**: copy `src/lib/ui/en.js` to `src/lib/ui/<code>.js`, translate the values (keep the keys and the `$1`, `$2` placeholders), and add the new file next to `/lib/ui/fr.js` in `manifest.json`, `src/bg.js`, the four popup pages (`popup`, `composer`, `setup`, `dashboard`) and the list in `src/background/devReload.js`. `tests/ui-text.test.js` checks that every language has the same keys and placeholders as English, that no key used by the code is missing and that every new file is loaded everywhere.
+
 ## Theme
 
 Everything is dark at all times (message window, settings, dashboard, bubble, panels), whatever the browser theme.
 
 ## What was removed
 
-Popup, options page, shortcuts, floating button, translation on hover, text to speech, the Bing, Yandex, DeepL and LibreTranslate services, polyfill, W3 style sheet, 40 interface languages (English and French remain), build tools (gulp, webpack), donations, release notes. The removed code can be found in the first commit of this repository (the original project as is).
+Popup (replaced by our own toolbar popup), options page, shortcuts, floating button, translation on hover, text to speech, the Bing, Yandex, DeepL and LibreTranslate services, polyfill, W3 style sheet, the original 40 interface languages and their `_locales` files (replaced by `src/lib/ui/`), build tools (gulp, webpack), donations, release notes. The removed code can be found in the first commit of this repository (the original project as is).
 
 ## What remains (all the useful code)
 
@@ -124,6 +130,7 @@ Popup, options page, shortcuts, floating button, translation on hover, text to s
 | `src/background/devReload.js` | automatic reload during development |
 | `src/contentScript/pageTranslator.js`, `showOriginal.js` | original page translation (TWP), with our fixes |
 | `src/contentScript/panel.js` | the panel and bubble (selection and input fields) |
+| `src/lib/ui-text.js`, `src/lib/ui/` | interface texts and languages |
 | `src/popup/` | the toolbar popup: tabs that show the three pages below |
 | `src/composer/`, `src/setup/`, `src/dashboard/` | the Translate, Settings and Dashboard views of the popup |
 | `src/lib/` | configuration, languages, original utilities |
@@ -156,6 +163,6 @@ node --test "tests/*.test.js"
 
 ## Good to know
 
-- The tests (87) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- The tests (103) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
-- Not done: translating the extension's own interface (English only) and automatically sending back to Groq the texts that came back unchanged.
+- Not done: automatically sending back to Groq the texts that came back unchanged.

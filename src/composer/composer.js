@@ -64,7 +64,7 @@
       setStatus("");
       return;
     }
-    setStatus("Translating...");
+    setStatus(twpUi.t("composerTranslating"));
     const source = $("#source").value;
     const target = $("#target").value;
     let r;
@@ -81,9 +81,9 @@
     if (mine !== ticket) return; // a more recent input took over
     if (r.ok) {
       $("#output").value = r.text;
-      setStatus(r.fallback ? "Free translator (AI: " + r.fallback + ")" : aiAvailable ? "AI" : "Free translator");
+      setStatus(r.fallback ? twpUi.t("composerFreeFallback", r.fallback) : twpUi.t(aiAvailable ? "composerAi" : "composerFree"));
     } else {
-      setStatus("Translation failed: " + (r.error || "unknown error"), true);
+      setStatus(twpUi.t("composerFailed", r.error || twpUi.t("composerUnknownError")), true);
     }
   }
 
@@ -93,6 +93,10 @@
   }
 
   function init() {
+    twpUi.translateDocument();
+    twpConfig.onChanged((name) => {
+      if (name === "uiLanguage") twpUi.translateDocument();
+    });
     fillLanguages($("#source"), true);
     fillLanguages($("#target"), false);
     $("#source").value = remembered(KEY_SOURCE, "auto");
@@ -145,7 +149,7 @@
         $("#output").select();
         document.execCommand("copy");
       }
-      setStatus("Copied");
+      setStatus(twpUi.t("composerCopied"));
     };
     if (openerTabId !== null) {
       $("#insert").hidden = false;
@@ -154,7 +158,7 @@
         if (!text) return;
         chrome.tabs.sendMessage(openerTabId, { action: "twpInsertText", text }, (ok) => {
           checkedLastError();
-          setStatus(ok ? "Inserted" : "No text field found in the page: use Copy", !ok);
+          setStatus(twpUi.t(ok ? "composerInserted" : "composerNoField"), !ok);
         });
       };
     }

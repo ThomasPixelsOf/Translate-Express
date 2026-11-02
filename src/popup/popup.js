@@ -62,6 +62,14 @@
     if (e.key === "Escape") window.close();
   });
 
+  // The tabs' texts follow the interface language chosen in the settings.
+  twpConfig.onReady(() => {
+    twpUi.translateDocument();
+    twpConfig.onChanged((name) => {
+      if (name === "uiLanguage") twpUi.translateDocument();
+    });
+  });
+
   (async function start() {
     pageTabId = await findPageTab();
     let request = null;

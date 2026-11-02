@@ -31,7 +31,7 @@ function createPage({ showBubbleSetting = "yes" } = {}) {
     },
     i18n: { getUILanguage: () => "fr" },
   };
-  const settings = { showTranslateSelectedButton: showBubbleSetting, targetLanguage: "fr", writeLanguage: "en" };
+  const settings = { showTranslateSelectedButton: showBubbleSetting, targetLanguage: "fr", writeLanguage: "en", uiLanguage: "en" };
   const saved = [];
   w.twpConfig = {
     get: (k) => (k in settings ? settings[k] : null),
@@ -46,6 +46,7 @@ function createPage({ showBubbleSetting = "yes" } = {}) {
   w.Range.prototype.getClientRects = () => [rect];
   w.Range.prototype.getBoundingClientRect = () => rect;
   w.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 10, right: 310, top: 200, bottom: 260, width: 300, height: 60 });
+  for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js"]) w.eval(fs.readFileSync(path.join(__dirname, "..", "src", f), "utf8") + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
   w.eval(CODE);
   const doc = w.document;
   return {

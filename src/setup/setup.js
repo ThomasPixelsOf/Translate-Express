@@ -11,7 +11,7 @@
   let savedKey = "";
   const llmFromForm = () => ({ name: "llm", provider: "auto", apiKey: $("#key").value.trim() || savedKey, model: $("#model").value });
   function showKeyState() {
-    $("#key").placeholder = savedKey ? "Key saved (hidden) - paste a new one to replace it" : "gsk_...";
+    $("#key").placeholder = savedKey ? twpUi.t("setupKeySaved") : "gsk_...";
   }
 
   function setModels(models, selected) {
@@ -23,7 +23,7 @@
       o.textContent = label;
       select.appendChild(o);
     };
-    add("", "Automatic (recommended)");
+    add("", twpUi.t("setupAutoModel"));
     for (const m of models) add(m.id, m.id);
     if (selected && !models.some((m) => m.id === selected)) add(selected, selected);
     select.value = selected || "";
@@ -31,22 +31,22 @@
 
   function loadModels() {
     const llm = llmFromForm();
-    if (llm.apiKey.length < 10) return setStatus("Paste your API key first.", true);
-    setStatus("Loading models...");
+    if (llm.apiKey.length < 10) return setStatus(twpUi.t("setupPasteFirst"), true);
+    setStatus(twpUi.t("setupLoadingModels"));
     chrome.runtime.sendMessage({ action: "llmModels", llm }, (r) => {
       checkedLastError();
       if (r && r.ok) {
         setModels(r.models, llm.model);
-        setStatus(r.models.length + " models available.");
+        setStatus(twpUi.t("setupModelsAvailable", r.models.length));
       } else {
-        setStatus("Failed: " + (r ? r.error : "no answer"), true);
+        setStatus(twpUi.t("setupFailed", r ? r.error : twpUi.t("setupNoAnswer")), true);
       }
     });
   }
 
   function save() {
     const llm = llmFromForm();
-    if (llm.apiKey.length < 10) return setStatus("Paste your API key.", true);
+    if (llm.apiKey.length < 10) return setStatus(twpUi.t("setupPaste"), true);
     const others = twpConfig.get("customServices").filter((cs) => cs.name !== "llm");
     twpConfig.set("customServices", [...others, llm]);
     twpConfig.set("enabledServices", [...twpConfig.get("enabledServices").filter((s) => s !== "llm"), "llm"]);
@@ -55,11 +55,11 @@
     $("#key").value = "";
     showKeyState();
     chrome.runtime.sendMessage({ action: "createLlmService", llm }, checkedLastError);
-    setStatus("Testing...");
+    setStatus(twpUi.t("setupTesting"));
     chrome.runtime.sendMessage({ action: "testLlmService", llm }, (r) => {
       checkedLastError();
-      if (r && r.ok) setStatus("Ready (" + r.model + ", " + r.ms + " ms): " + r.text);
-      else setStatus("Saved, but the test failed: " + (r ? r.error : "no answer"), true);
+      if (r && r.ok) setStatus(twpUi.t("setupReady", r.model, r.ms, r.text));
+      else setStatus(twpUi.t("setupSavedTestFailed", r ? r.error : twpUi.t("setupNoAnswer")), true);
     });
   }
 
@@ -73,7 +73,7 @@
     chrome.runtime.sendMessage({ action: "removeLlmService" }, checkedLastError);
     $("#key").value = "";
     setModels([], "");
-    setStatus("Key removed: the free translator is used again.");
+    setStatus(twpUi.t("setupKeyRemoved"));
   }
 
   // Target language: a single one for the whole extension, saved as soon as it is changed.
@@ -85,7 +85,7 @@
     select.onchange = () => {
       twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", select.value);
-      setStatus("Reading language saved: " + names[select.value]);
+      setStatus(twpUi.t("setupReadSaved", names[select.value]));
     };
     // Writing language: the one the typed text is translated into for the recipient.
     const write = $("#writeLanguage");
@@ -93,7 +93,7 @@
     write.value = twpConfig.get("writeLanguage") || "en";
     write.onchange = () => {
       twpConfig.set("writeLanguage", write.value);
-      setStatus("Writing language saved: " + names[write.value]);
+      setStatus(twpUi.t("setupWriteSaved", names[write.value]));
     };
   }
 
@@ -104,7 +104,34 @@
     });
   }
 
+  // Interface language: "default" follows the browser; the others are the languages of lib/ui/*.js.
+  function initInterfaceLanguage() {
+    const select = $("#uiLanguage");
+    select.textContent = "";
+    const add = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      select.appendChild(o);
+    };
+    add("default", twpUi.t("setupInterfaceDefault"));
+    for (const l of twpUi.languages()) add(l.code, l.name);
+    select.value = twpConfig.get("uiLanguage") || "default";
+    select.onchange = () => {
+      twpConfig.set("uiLanguage", select.value);
+      twpUi.translateDocument();
+      showKeyState();
+      initInterfaceLanguage();
+      initLanguage(); // the language names are shown in the interface language
+      const auto = document.querySelector("#model option[value='']");
+      if (auto) auto.textContent = twpUi.t("setupAutoModel");
+      setStatus(twpUi.t("setupInterfaceSaved"));
+    };
+  }
+
   twpConfig.onReady(() => {
+    twpUi.translateDocument();
+    initInterfaceLanguage();
     initLanguage();
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
     if (llm) {

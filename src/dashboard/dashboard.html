@@ -12,26 +12,31 @@
 <body>
   <header>
     <h1>Translate Express</h1>
-    <span class="sub">Diagnostics</span>
+    <span class="sub" data-ui="dashboardSubtitle"></span>
     <span class="spacer"></span>
-    <button id="refresh" title="Refresh">Refresh</button>
-    <button id="copy" title="Copy a full report">Copy report</button>
-    <button id="clear" title="Clear the log">Clear</button>
+    <button id="refresh" data-ui="dashboardRefresh"></button>
+    <button id="copy" data-ui-title="dashboardCopyReportTitle" data-ui="dashboardCopyReport"></button>
+    <button id="clear" data-ui-title="dashboardClearTitle" data-ui="dashboardClear"></button>
   </header>
   <nav>
-    <button data-tab="summary" class="on">Summary</button>
-    <button data-tab="page">This page</button>
-    <button data-tab="log">Log</button>
+    <button data-tab="summary" class="on" data-ui="dashboardTabSummary"></button>
+    <button data-tab="page" data-ui="dashboardTabPage"></button>
+    <button data-tab="log" data-ui="dashboardTabLog"></button>
   </nav>
   <main>
     <section id="summary"></section>
     <section id="page" hidden></section>
     <section id="log" hidden>
-      <input id="filter" placeholder="Filter (e.g. llm.request, 429, guard)" />
+      <input id="filter" data-ui-placeholder="dashboardFilter" />
       <pre id="events"></pre>
     </section>
   </main>
   <footer id="status"></footer>
+  <script src="/lib/languages.js"></script>
+  <script src="/lib/config.js"></script>
+  <script src="/lib/ui-text.js"></script>
+  <script src="/lib/ui/en.js"></script>
+  <script src="/lib/ui/fr.js"></script>
   <script src="metrics.js"></script>
   <script src="dashboard.js"></script>
 </body>

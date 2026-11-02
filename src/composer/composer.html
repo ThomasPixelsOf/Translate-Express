@@ -10,33 +10,31 @@
 
 <body>
   <header>
-    <select id="source" aria-label="Source language"></select>
-    <button id="swap" title="Swap languages and texts" aria-label="Swap">&#8644;</button>
-    <select id="target" aria-label="Target language"></select>
-    <select id="tone" aria-label="Tone" hidden>
-      <option value="">Same tone</option>
-      <option value="formal">Formal</option>
-      <option value="informal">Informal</option>
+    <select id="source" data-ui-aria="composerSourceLanguage"></select>
+    <button id="swap" data-ui-title="composerSwapTitle" data-ui-aria="composerSwap">&#8644;</button>
+    <select id="target" data-ui-aria="composerTargetLanguage"></select>
+    <select id="tone" data-ui-aria="composerTone" hidden>
+      <option value="" data-ui="composerSameTone"></option>
+      <option value="formal" data-ui="composerFormal"></option>
+      <option value="informal" data-ui="composerInformal"></option>
     </select>
     <span id="status" aria-live="polite"></span>
   </header>
 
   <main>
     <section>
-      <textarea id="input" placeholder="Type or paste your message..." autofocus spellcheck="false"></textarea>
+      <textarea id="input" data-ui-placeholder="composerInputPlaceholder" autofocus spellcheck="false"></textarea>
     </section>
     <section>
-      <textarea id="output" readonly placeholder="The translation appears here as you type."></textarea>
+      <textarea id="output" readonly data-ui-placeholder="composerOutputPlaceholder"></textarea>
     </section>
   </main>
 
   <footer>
-    <button id="copy" class="primary">Copy translation</button>
-    <button id="insert" hidden>Insert in the page</button>
-    <button id="clear">Clear</button>
-    <span id="hint" hidden>
-      For better quality, <a href="#" id="goKey">add a Groq key</a> (one paste, no other setting).
-    </span>
+    <button id="copy" class="primary" data-ui="composerCopy"></button>
+    <button id="insert" hidden data-ui="composerInsert"></button>
+    <button id="clear" data-ui="composerClear"></button>
+    <span id="hint" hidden><span data-ui="composerHintBefore"></span><a href="#" id="goKey" data-ui="composerHintLink"></a><span data-ui="composerHintAfter"></span></span>
   </footer>
 
   <script src="/lib/checkedLastError.js"></script>
@@ -44,7 +42,9 @@
   <script src="/lib/languages.js"></script>
   <script src="/lib/config.js"></script>
   <script src="/lib/platformInfo.js"></script>
-  <script src="/lib/i18n.js"></script>
+  <script src="/lib/ui-text.js"></script>
+  <script src="/lib/ui/en.js"></script>
+  <script src="/lib/ui/fr.js"></script>
   <script src="composer.js"></script>
 </body>
 

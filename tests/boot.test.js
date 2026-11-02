@@ -12,7 +12,7 @@ const SRC = path.join(__dirname, "..", "src");
 function fakeChrome() {
   const menus = [];
   const handlers = { onMessage: [], onClicked: [], onInstalled: [], onStartup: [] };
-  const storage = {};
+  const storage = { uiLanguage: "en" }; // the fake browser is French: the menu tests read English texts, chosen explicitly
   const session = {};
   const state = { popups: [], popupFails: false, dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, alarms: [], reloaded: 0, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [], onAlarm: [] } };
   const chrome = {
@@ -242,7 +242,7 @@ test("the language list: common ones first, then all from A to Z, without duplic
   assert.deepEqual(r.frequentes.slice(0, 4), ["en", "fr", "de", "es"]);
   const sorted = [...r.all].sort((a, b) => a.localeCompare(b, "fr"));
   assert.deepEqual(r.all, sorted, "all the languages are sorted from A to Z");
-  assert.equal(new Set(r.all).size, r.all.length, "pas de doublon");
+  assert.equal(new Set(r.all).size, r.all.length, "each language name is listed once");
   assert.ok(r.all.length > 50);
   assert.ok(!r.all.some((n) => /emoji/i.test(n)), "\"Emoji\" is not a language");
 });

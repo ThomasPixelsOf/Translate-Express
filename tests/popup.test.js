@@ -19,7 +19,10 @@ function createPopup(sessionData = {}) {
   const session = { ...sessionData };
   const removed = [];
   w.close = () => { w.closed = true; };
+  w.twpConfig = { get: () => "en", onReady: (cb) => cb(), onChanged: (cb) => { w.configChanged = cb; } };
+  for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js"]) w.eval(fs.readFileSync(path.join(SRC, f), "utf8") + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
   w.chrome = {
+    i18n: { getUILanguage: () => "fr" },
     tabs: { query: async () => [{ id: 5, lastAccessed: 10 }, { id: 9, lastAccessed: 99 }] },
     storage: {
       session: {

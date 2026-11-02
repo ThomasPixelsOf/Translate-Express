@@ -11975,15 +11975,15 @@ const twpLang = (function () {
     return allLanguagesNames[uiLanguage];
   };
 
-  // Langues courantes, affichées en premier dans toutes les listes.
-  // « Emoji » (emj) est proposé par Google Translate mais n'est pas une langue : écarté des listes.
+  // Common languages, shown first in every list.
+  // "Emoji" (emj) is offered by Google Translate but is not a language: left out of the lists.
   const NOT_REAL_LANGUAGES = ["emj"];
   const FREQUENT_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", "zh-CN", "ko", "ar", "tr", "pl"];
 
   /**
-   * Remplit une liste déroulante : « Detect language » (facultatif), puis les langues courantes, puis toutes les
-   * langues triées de A à Z selon la langue de l'interface. Les options ont des couleurs explicites : lisibles
-   * sur fond clair comme sur fond sombre.
+   * Fills a dropdown: "Detect language" (optional), then the common languages, then all the languages sorted from A to Z
+   * for the interface language. A language name shared by two codes (e.g. "Rundi" for rn and run) is listed once. The
+   * options have explicit colors: readable on light and dark backgrounds.
    * @param {HTMLSelectElement} select
    * @param {{auto?: boolean}} options
    */
@@ -12006,7 +12006,12 @@ const twpLang = (function () {
     select.appendChild(frequent);
     const all = doc.createElement("optgroup");
     all.label = "All languages (A-Z)";
-    for (const code of [...known].sort((a, b) => collator.compare(names[a], names[b]))) add(all, code, names[code]);
+    const listedNames = new Set();
+    for (const code of [...known].sort((a, b) => collator.compare(names[a], names[b]))) {
+      if (listedNames.has(names[code])) continue;
+      listedNames.add(names[code]);
+      add(all, code, names[code]);
+    }
     select.appendChild(all);
   };
 
@@ -12057,13 +12062,13 @@ const twpLang = (function () {
    * twpLang.codeToLanguage("de")
    * // returns "German"
    * twpLang.codeToLanguage("und")
-   * // returns "Unknown" -- twpI18n.getMessage("msgUnknownLanguage")
+   * // returns "Unknown" (translated: see lib/ui/*.js, key languageUnknown)
    * @param {string} langCode
    * @returns {string} languageName
    */
   twpLang.codeToLanguage = function (langCode) {
     if (langCode === "und") {
-      return twpI18n.getMessage("msgUnknownLanguage");
+      return typeof twpUi !== "undefined" ? twpUi.t("languageUnknown") : "Unknown";
     }
 
     const languageList = twpLang.getLanguageList();

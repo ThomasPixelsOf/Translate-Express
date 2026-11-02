@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>Translate Express - Languages and Groq key</title>
+  <title>Translate Express - Settings</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="setup.css" />
@@ -10,30 +10,31 @@
 
 <body>
   <section id="languages-section">
-    <h1>Languages</h1>
-    <label for="language">I read in (pages and selected text are translated into)</label>
+    <h1 data-ui="setupLanguages"></h1>
+    <label for="language" data-ui="setupRead"></label>
     <select id="language"></select>
-    <label for="writeLanguage">I write in (what I type is translated into)</label>
+    <label for="writeLanguage" data-ui="setupWrite"></label>
     <select id="writeLanguage"></select>
+    <label for="uiLanguage" data-ui="setupInterface"></label>
+    <select id="uiLanguage"></select>
   </section>
 
   <section id="key-section">
-  <h1>Groq key (optional)</h1>
-  <p>Paste your Groq API key: the AI becomes your translator. The model is chosen automatically.
-    The key stays in this browser. The text you translate is sent to Groq.</p>
+  <h1 style="margin-top: 28px;" data-ui="setupKeyTitle"></h1>
+  <p data-ui="setupKeyIntro"></p>
 
-  <label for="key">API key</label>
+  <label for="key" data-ui="setupApiKey"></label>
   <input type="password" id="key" placeholder="gsk_..." autocomplete="off" spellcheck="false" autofocus>
 
   <details>
-    <summary>Model</summary>
-    <select id="model"><option value="">Automatic (recommended)</option></select>
-    <button id="load" type="button">Load the list</button>
+    <summary data-ui="setupModel"></summary>
+    <select id="model"><option value="" data-ui="setupAutoModel"></option></select>
+    <button id="load" type="button" data-ui="setupLoadList"></button>
   </details>
 
   <div class="buttons">
-    <button id="save" class="primary">Save</button>
-    <button id="remove">Remove the key</button>
+    <button id="save" class="primary" data-ui="setupSave"></button>
+    <button id="remove" data-ui="setupRemove"></button>
   </div>
   </section>
   <p id="status" aria-live="polite"></p>
@@ -43,6 +44,9 @@
   <script src="/lib/languages.js"></script>
   <script src="/lib/config.js"></script>
   <script src="/lib/platformInfo.js"></script>
+  <script src="/lib/ui-text.js"></script>
+  <script src="/lib/ui/en.js"></script>
+  <script src="/lib/ui/fr.js"></script>
   <script src="setup.js"></script>
 </body>
 

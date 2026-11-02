@@ -11,11 +11,16 @@
 
 <body>
   <nav>
-    <button data-view="translate" class="on">Translate</button>
-    <button data-view="settings">Settings</button>
-    <button data-view="dashboard">Dashboard</button>
+    <button data-view="translate" class="on" data-ui="popupTabTranslate"></button>
+    <button data-view="settings" data-ui="popupTabSettings"></button>
+    <button data-view="dashboard" data-ui="popupTabDashboard"></button>
   </nav>
   <iframe id="frame" title="Translate Express"></iframe>
+  <script src="/lib/languages.js"></script>
+  <script src="/lib/config.js"></script>
+  <script src="/lib/ui-text.js"></script>
+  <script src="/lib/ui/en.js"></script>
+  <script src="/lib/ui/fr.js"></script>
   <script src="popup.js"></script>
 </body>
 

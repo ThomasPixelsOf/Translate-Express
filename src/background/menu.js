@@ -68,8 +68,8 @@ function pageService() {
 
 function pageMenuTitle(state = "original") {
   return state === "translated"
-    ? "Show original page"
-    : "Translate this page to " + twpLang.codeToLanguage(targetLanguage());
+    ? twpUi.t("menuShowOriginal")
+    : twpUi.t("menuTranslatePage", twpLang.codeToLanguage(targetLanguage()));
 }
 
 // Only one build at a time: a second request made while one is running is replayed afterwards, otherwise both builds
@@ -93,33 +93,33 @@ function createMenus() {
   };
   chrome.contextMenus.removeAll(() => {
     checkedLastError();
-    chrome.contextMenus.create({ id: MENU.selection, title: "Translate selection", contexts: ["selection"] });
-    chrome.contextMenus.create({ id: MENU.field, title: "Translate what I'm writing", contexts: ["editable"] });
+    chrome.contextMenus.create({ id: MENU.selection, title: twpUi.t("menuTranslateSelection"), contexts: ["selection"] });
+    chrome.contextMenus.create({ id: MENU.field, title: twpUi.t("menuTranslateField"), contexts: ["editable"] });
     chrome.contextMenus.create({
       id: MENU.page,
       title: pageMenuTitle(),
       contexts: ["page", "frame"],
       documentUrlPatterns: ["http://*/*", "https://*/*", "file://*/*"],
     });
-    chrome.contextMenus.create({ id: MENU.composer, title: "Message window (live translation)", contexts: ["all"] });
+    chrome.contextMenus.create({ id: MENU.composer, title: twpUi.t("menuComposer"), contexts: ["all"] });
 
     chrome.contextMenus.create({
       id: MENU.bubble,
       type: "checkbox",
       checked: twpConfig.get("showTranslateSelectedButton") !== "no",
-      title: "Show the logo when I select text",
+      title: twpUi.t("menuShowLogo"),
       contexts: ["all"],
     });
 
-    chrome.contextMenus.create({ id: MENU.dashboard, title: "Dashboard (diagnostics)", contexts: ["all", "action"] });
-    chrome.contextMenus.create({ id: MENU.key, title: "Groq key...", contexts: ["all", "action"] });
+    chrome.contextMenus.create({ id: MENU.dashboard, title: twpUi.t("menuDashboard"), contexts: ["all", "action"] });
+    chrome.contextMenus.create({ id: MENU.key, title: twpUi.t("menuGroqKey"), contexts: ["all", "action"] });
 
     // Two languages: the one you READ in (pages, displayed text) and the one you WRITE in (typed text, translated
     // for the recipient). They are independent: read in French, write in English.
     const known = new Set(twpLang.TargetLanguages);
-    const addLanguageMenu = (id, prefix, title, current, moreId, done) => {
+    const addLanguageMenu = (id, prefix, titleKey, current, moreId, done) => {
       const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
-      chrome.contextMenus.create({ id, title: title + twpLang.codeToLanguage(current), contexts: ["all"] });
+      chrome.contextMenus.create({ id, title: twpUi.t(titleKey, twpLang.codeToLanguage(current)), contexts: ["all"] });
       for (const code of choices) {
         chrome.contextMenus.create({
           id: prefix + code,
@@ -130,10 +130,10 @@ function createMenus() {
           contexts: ["all"],
         });
       }
-      chrome.contextMenus.create({ id: moreId, parentId: id, title: "More languages...", contexts: ["all"] }, done);
+      chrome.contextMenus.create({ id: moreId, parentId: id, title: twpUi.t("menuMoreLanguages"), contexts: ["all"] }, done);
     };
-    addLanguageMenu(MENU.lang, "twp-lang-", "Read in: ", targetLanguage(), MENU.languagesRead);
-    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage(), MENU.languagesWrite, finished); // the last entry created ends the build
+    addLanguageMenu(MENU.lang, "twp-lang-", "menuReadIn", targetLanguage(), MENU.languagesRead);
+    addLanguageMenu(MENU.write, "twp-write-", "menuWriteIn", writeLanguage(), MENU.languagesWrite, finished); // the last entry created ends the build
     refreshMenuForActiveTab();
   });
 }
@@ -256,5 +256,5 @@ chrome.runtime.onStartup.addListener(start);
 start();
 // Language change (from the menu or the settings page): menu titles updated.
 twpConfig.onChanged((name) => {
-  if (name === "targetLanguage" || name === "writeLanguage") createMenus();
+  if (name === "targetLanguage" || name === "writeLanguage" || name === "uiLanguage") createMenus();
 });

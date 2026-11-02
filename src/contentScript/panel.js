@@ -142,13 +142,13 @@
     host.style.cssText = "all: initial;";
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${CSS}</style>
-      <div class="panel" role="dialog" aria-label="Translation">
-        <div class="row"><span class="what"></span><select class="lang" aria-label="Target language"></select><span class="status"></span><button class="refresh" aria-label="Translate again" title="Translate again"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg></button><button class="close" aria-label="Close">&times;</button></div>
+      <div class="panel" role="dialog">
+        <div class="row"><span class="what"></span><select class="lang"></select><span class="status"></span><button class="refresh"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg></button><button class="close">&times;</button></div>
         <div class="out" aria-live="polite"></div>
         <div class="row" style="margin-bottom:0">
-          <button class="primary replace" hidden>Replace</button>
-          <button class="copy">Copy</button>
-          <button class="win" style="margin-left:auto">Window</button>
+          <button class="primary replace" hidden></button>
+          <button class="copy"></button>
+          <button class="win" style="margin-left:auto"></button>
         </div>
       </div>`;
     ui = {
@@ -163,6 +163,7 @@
       refresh: root.querySelector(".refresh"),
       close: root.querySelector(".close"),
     };
+    applyTexts();
     twpLang.fillLanguageSelect(ui.lang);
     // The target language is the same everywhere (menu, page, message window): the one in twpConfig.
     const ui2 = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
@@ -187,16 +188,16 @@
       const text = ui.out.dataset.text;
       if (!field || !text) return;
       if (replaceInField(field, text, ui.out.dataset.scope === "selection")) show(false);
-      else setStatus("The selected text changed: select it again", true);
+      else setStatus(twpUi.t("panelSelectionChanged"), true);
     });
     ui.copy.addEventListener("click", async () => {
       const text = ui.out.dataset.text || "";
       if (!text) return;
       try {
         await navigator.clipboard.writeText(text);
-        setStatus("Copied");
+        setStatus(twpUi.t("panelCopied"));
       } catch (e) {
-        setStatus("Copy failed", true);
+        setStatus(twpUi.t("panelCopyFailed"), true);
       }
     });
     ui.win.addEventListener("click", () => {
@@ -253,14 +254,28 @@
   const languageKey = () => (mode === "field" ? "writeLanguage" : "targetLanguage");
   const currentLanguage = () => twpConfig.get(languageKey());
 
+  // The panel's texts follow the interface language chosen in the settings.
+  function applyTexts() {
+    if (!ui) return;
+    ui.panel.setAttribute("aria-label", twpUi.t("panelTranslation"));
+    ui.lang.setAttribute("aria-label", twpUi.t("panelTargetLanguage"));
+    ui.refresh.title = twpUi.t("panelTranslateAgain");
+    ui.refresh.setAttribute("aria-label", twpUi.t("panelTranslateAgain"));
+    ui.close.setAttribute("aria-label", twpUi.t("panelClose"));
+    ui.replace.textContent = twpUi.t("panelReplace");
+    ui.copy.textContent = twpUi.t("panelCopy");
+    ui.win.textContent = twpUi.t("panelWindow");
+  }
+
   function show(visible) {
     if (visible && !host) build();
     open = visible;
     if (!ui) return;
     ui.panel.style.display = visible ? "block" : "none";
     if (visible) {
+      applyTexts();
       ui.replace.hidden = mode !== "field";
-      ui.what.textContent = mode === "field" ? "Write in" : "Read in";
+      ui.what.textContent = twpUi.t(mode === "field" ? "panelWriteIn" : "panelReadIn");
       ui.lang.value = currentLanguage() || ui.lang.value;
       place();
       translateNow();
@@ -299,7 +314,7 @@
     if (!text.trim()) {
       ui.out.textContent = "";
       ui.out.dataset.text = "";
-      setStatus(mode === "field" ? "The field is empty" : "");
+      setStatus(mode === "field" ? twpUi.t("panelFieldEmpty") : "");
       return;
     }
     const target = ui.lang.value;
@@ -309,11 +324,11 @@
       ui.out.textContent = kept.text;
       ui.out.dataset.text = kept.text;
       ui.out.dataset.scope = scope;
-      setStatus(kept.free ? "Free translator (kept)" : "AI (kept)");
+      setStatus(twpUi.t(kept.free ? "panelFreeKept" : "panelAiKept"));
       place();
       return;
     }
-    setStatus("Translating...");
+    setStatus(twpUi.t("panelTranslating"));
     let r = await ask({ action: "llmLive", text, sourceLanguage: "auto", targetLanguage: target });
     if (!r || !r.ok) {
       // No AI key, or the AI failed: original free translator.
@@ -326,9 +341,9 @@
       ui.out.textContent = r.text;
       ui.out.dataset.text = r.text;
       ui.out.dataset.scope = scope;
-      setStatus(r.free ? "Free translator" : "AI");
+      setStatus(twpUi.t(r.free ? "panelFree" : "panelAi"));
     } else {
-      setStatus("Translation failed", true);
+      setStatus(twpUi.t("panelFailed"), true);
     }
     place();
   }
@@ -411,8 +426,10 @@
         img { width: 18px; height: 18px; display: block; }
         /* Fallback when the logo cannot be loaded. */
         button.letter { border-radius: 4px; background: #4589ff; color: #fff; font: 700 11px/1 system-ui, sans-serif; }
-      </style><button title="Translate the selection" aria-label="Translate the selection"></button>`;
+      </style><button></button>`;
       const el = root.querySelector("button");
+      el.title = twpUi.t("logoTitle");
+      el.setAttribute("aria-label", twpUi.t("logoTitle"));
       // The extension's logo; the letter "A" if the icon cannot be loaded.
       const logo = document.createElement("img");
       logo.alt = "";

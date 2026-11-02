@@ -24,17 +24,17 @@ function renderSummary() {
   $("summary").innerHTML =
     s.verdicts.map((v) => '<div class="verdict ' + v.level + '">' + esc(v.text) + "</div>").join("") +
     '<div class="cards">' +
-    card(s.requests.ok + " / " + s.requests.total, "AI requests ok") +
-    card(twpMetrics.sec(s.requests.avgMs), "network avg") +
-    card(twpMetrics.sec(s.waits.avgBudgetMs), "budget wait avg") +
-    card(s.requests.rateLimited, "rate limited (429)") +
-    card(s.tokens.last60s + (s.tokens.limitPerMinute ? " / " + s.tokens.limitPerMinute : ""), "tokens, last minute") +
-    card(s.html.failedBlocks, "failed blocks") +
-    card(s.html.googleFallbackOk, "rescued by Google") +
-    card(s.guards.gaveUp, "given up") +
-    "</div><h2>Tokens, last 10 minutes</h2>" +
+    card(s.requests.ok + " / " + s.requests.total, twpUi.t("dashboardAiRequestsOk")) +
+    card(twpMetrics.sec(s.requests.avgMs), twpUi.t("dashboardNetworkAvg")) +
+    card(twpMetrics.sec(s.waits.avgBudgetMs), twpUi.t("dashboardBudgetWaitAvg")) +
+    card(s.requests.rateLimited, twpUi.t("dashboardRateLimited")) +
+    card(s.tokens.last60s + (s.tokens.limitPerMinute ? " / " + s.tokens.limitPerMinute : ""), twpUi.t("dashboardTokensLastMinute")) +
+    card(s.html.failedBlocks, twpUi.t("dashboardFailedBlocks")) +
+    card(s.html.googleFallbackOk, twpUi.t("dashboardRescued")) +
+    card(s.guards.gaveUp, twpUi.t("dashboardGivenUp")) +
+    "</div><h2>" + twpUi.t("dashboardTokensChart") + "</h2>" +
     '<svg class="chart" viewBox="0 0 100 100" preserveAspectRatio="none">' + bars + "</svg>" +
-    "<h2>Recent page translations</h2><table><tr><th>Time</th><th>Site</th><th>Pieces</th><th>Sent</th><th>First visible</th><th>Pending</th></tr>" +
+    "<h2>" + twpUi.t("dashboardRecent") + "</h2><table><tr>" + ["Time", "Site", "Pieces", "Sent", "FirstVisible", "Pending"].map((c) => "<th>" + twpUi.t("dashboardCol" + c) + "</th>").join("") + "</tr>" +
     s.sessions.map((x) => "<tr><td>" + twpMetrics.hhmmss(x.t).slice(0, 8) + "</td><td>" + esc(x.host || "") + "</td><td>" + x.pieces + "</td><td>" + x.sent + "</td><td>" + (x.firstVisibleMs === null ? "-" : twpMetrics.sec(x.firstVisibleMs)) + "</td><td>" + (x.progress ? x.progress.pending : "-") + "</td></tr>").join("") +
     "</table>";
 }
@@ -42,12 +42,12 @@ function renderSummary() {
 function renderPage() {
   const r = pageReport;
   const el = $("page");
-  const scan = '<button id="scan">Scan now</button>';
-  if (!r || r.error) return (el.innerHTML = "<p>No report from the page" + (r && r.error ? ": " + esc(r.error) : "") + ".</p>" + scan);
+  const scan = '<button id="scan">' + twpUi.t("dashboardScanNow") + "</button>";
+  if (!r || r.error) return (el.innerHTML = "<p>" + twpUi.t("dashboardNoReport") + (r && r.error ? ": " + esc(r.error) : "") + ".</p>" + scan);
   el.innerHTML =
     "<p>" + esc(r.host) + " - state: <b>" + esc(r.pageState) + "</b>, service " + esc(r.service) + ", target " + esc(r.target) + " " + scan + "</p>" +
     '<div class="cards">' + Object.entries(r.counts || {}).map(([k, v]) => card(v, k)).join("") + "</div>" +
-    "<h2>Excluded</h2><pre>" + esc(JSON.stringify(r.excluded || {})) + "</pre>" +
+    "<h2>" + twpUi.t("dashboardExcluded") + "</h2><pre>" + esc(JSON.stringify(r.excluded || {})) + "</pre>" +
     Object.entries(r.examples || {}).map(([cat, list]) => "<h2>" + esc(cat) + "</h2>" + list.map((x) => '<div class="ex">"' + esc(x.text) + '" in ' + esc(x.path) + (x.why ? " (" + esc(x.why) + ")" : "") + "</div>").join("")).join("");
   const b = $("scan");
   if (b) b.onclick = async () => { await send({ action: "twpDiagScan", tabId }); setTimeout(load, 800); };
@@ -63,7 +63,7 @@ async function load() {
   events = (res && res.events) || [];
   summary = twpMetrics.summarize(events);
   pageReport = await send({ action: "twpDiagPageReport", tabId });
-  $("status").textContent = (res && res.enabled === false ? "Logging is off (setting \"diagnostics\"). " : "") + events.length + " events kept (last 1000).";
+  $("status").textContent = (res && res.enabled === false ? twpUi.t("dashboardLoggingOff") : "") + twpUi.t("dashboardEventsKept", events.length);
   renderSummary();
   renderPage();
   renderLog();
@@ -78,7 +78,16 @@ $("refresh").onclick = load;
 $("clear").onclick = async () => { await send({ action: "twpDiagClear" }); load(); };
 $("copy").onclick = async () => {
   await navigator.clipboard.writeText(twpMetrics.buildReport(summary, pageReport, events));
-  $("status").textContent = "Report copied.";
+  $("status").textContent = twpUi.t("dashboardReportCopied");
 };
-load();
+twpConfig.onReady(() => {
+  twpUi.translateDocument();
+  load();
+});
+twpConfig.onChanged((name) => {
+  if (name === "uiLanguage") {
+    twpUi.translateDocument();
+    load();
+  }
+});
 setInterval(load, 5000);
