@@ -35,8 +35,4 @@ twpConfig.onReady(function () {
   platformInfo.isFirefox = typeof browser !== "undefined"; //TODO: fix this, since Chrome also has browser defined from v148
   platformInfo.isOpera = userAgent.match(/OPR/i);
 
-  platformInfo.supportsCommandsUpdate = function () {
-    const api = globalThis.browser ?? globalThis.chrome;
-    return typeof api?.commands?.update === "function";
-  };
 });
