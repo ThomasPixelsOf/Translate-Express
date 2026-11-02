@@ -15,7 +15,7 @@ var twpLlm = (function () {
 
   // Zero configuration: the provider is recognized from the shape of the key, and the model is picked automatically among those the provider offers.
   // Speed first: a model that translates without "thinking" before answering (reasoning models come last in the list).
-  const MODELES_GROQ = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"];
+  const GROQ_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"];
 
   function detectProvider(key) {
     key = String(key || "").trim();
@@ -47,7 +47,7 @@ var twpLlm = (function () {
     } catch (e) {}
     let choice = null;
     if (cfg.provider === "groq") {
-      choice = MODELES_GROQ.find((m) => ids.includes(m)) || ids.find((id) => /llama|qwen|gpt-oss/i.test(id) && !/whisper|guard|tts/i.test(id));
+      choice = GROQ_MODELS.find((m) => ids.includes(m)) || ids.find((id) => /llama|qwen|gpt-oss/i.test(id) && !/whisper|guard|tts/i.test(id));
     }
     if (!choice) {
       const err = new Error("no model found automatically: enter one in the advanced settings");
