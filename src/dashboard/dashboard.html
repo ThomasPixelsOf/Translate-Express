@@ -5,12 +5,33 @@
   <title>Translate Express - Dashboard</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
   <link rel="stylesheet" href="dashboard.css" />
 </head>
 
 <body>
-  <h1>Translate Express - Dashboard</h1>
-  <p>Loading...</p>
+  <header>
+    <h1>Translate Express</h1>
+    <span class="sub">Diagnostics</span>
+    <span class="spacer"></span>
+    <button id="refresh" title="Refresh">Refresh</button>
+    <button id="copy" title="Copy a full report">Copy report</button>
+    <button id="clear" title="Clear the log">Clear</button>
+  </header>
+  <nav>
+    <button data-tab="summary" class="on">Summary</button>
+    <button data-tab="page">This page</button>
+    <button data-tab="log">Log</button>
+  </nav>
+  <main>
+    <section id="summary"></section>
+    <section id="page" hidden></section>
+    <section id="log" hidden>
+      <input id="filter" placeholder="Filter (e.g. llm.request, 429, guard)" />
+      <pre id="events"></pre>
+    </section>
+  </main>
+  <footer id="status"></footer>
   <script src="metrics.js"></script>
   <script src="dashboard.js"></script>
 </body>

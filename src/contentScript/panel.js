@@ -116,19 +116,17 @@
   const CSS = `
     :host { all: initial; }
     * { box-sizing: border-box; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .panel { position: fixed; z-index: 2147483647; width: 380px; max-width: calc(100vw - 16px); background: #fff; color: #1d1d1f;
-      border: 1px solid #c8c8d0; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28); padding: 10px; display: none; }
-    @media (prefers-color-scheme: dark) { .panel { background: #1c1c1e; color: #f2f2f4; border-color: #3a3a3e; } }
+    .panel { position: fixed; z-index: 2147483647; width: 380px; max-width: calc(100vw - 16px); background: #1c1c1e; color: #f2f2f4;
+      border: 1px solid #3a3a3e; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28); padding: 10px; display: none; }
     .row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
-    select, button { font: inherit; border: 1px solid #c8c8d0; border-radius: 6px; padding: 4px 8px; background: transparent; color: inherit; cursor: pointer; }
-    select { flex: 1; min-width: 0; color-scheme: light dark; }
-    option, optgroup { background: #fff; color: #1d1d1f; }
-    @media (prefers-color-scheme: dark) { option, optgroup { background: #26262a; color: #f2f2f4; } }
+    select, button { font: inherit; border: 1px solid #3a3a3e; border-radius: 6px; padding: 4px 8px; background: transparent; color: inherit; cursor: pointer; }
+    select { flex: 1; min-width: 0; color-scheme: dark; }
+    option, optgroup { background: #26262a; color: #f2f2f4; }
     optgroup { font-weight: 700; }
     option { font-weight: 400; }
     button.primary { background: #0f62fe; border-color: #0f62fe; color: #fff; }
     button[hidden] { display: none; }
-    .out { font-size: 15px; white-space: pre-wrap; max-height: 220px; overflow: auto; border: 1px solid #c8c8d0; border-radius: 6px; padding: 8px; min-height: 52px; margin-bottom: 8px; }
+    .out { font-size: 15px; white-space: pre-wrap; max-height: 220px; overflow: auto; border: 1px solid #3a3a3e; border-radius: 6px; padding: 8px; min-height: 52px; margin-bottom: 8px; }
     .what { font-size: 12px; opacity: .75; white-space: nowrap; }
     .status { font-size: 11px; opacity: .7; }
     .err { color: #d93025; opacity: 1; }
@@ -339,12 +337,11 @@
       width = Math.min(Math.max(Number(localStorage.getItem(DOCK_WIDTH_KEY)) || 400, 320), Math.floor(window.innerWidth * 0.8));
     } catch (e) {}
     root.innerHTML = `<style>
-      .dock { position: fixed; top: 0; right: 0; height: 100vh; width: ${width}px; z-index: 2147483647; display: flex; background: #fff;
-        box-shadow: -4px 0 18px rgba(0,0,0,.28); border-left: 1px solid #c8c8d0; }
-      @media (prefers-color-scheme: dark) { .dock { background: #1c1c1e; border-left-color: #3a3a3e; } }
+      .dock { position: fixed; top: 0; right: 0; height: 100vh; width: ${width}px; z-index: 2147483647; display: flex; background: #1c1c1e;
+        box-shadow: -4px 0 18px rgba(0,0,0,.28); border-left: 1px solid #3a3a3e; }
       .grip { width: 6px; cursor: ew-resize; background: transparent; flex: none; }
       .grip:hover { background: rgba(15,98,254,.35); }
-      iframe { flex: 1; border: 0; min-width: 0; height: 100%; color-scheme: normal; }
+      iframe { flex: 1; border: 0; min-width: 0; height: 100%; color-scheme: dark; }
       .x { position: absolute; top: 6px; right: 8px; z-index: 1; width: 26px; height: 26px; border-radius: 13px; border: 0; cursor: pointer;
         background: rgba(128,128,128,.25); color: inherit; font: 16px/1 system-ui, sans-serif; }
     </style>

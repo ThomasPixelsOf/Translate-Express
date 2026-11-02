@@ -408,6 +408,202 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   let nodesToRestore = [];
 
+  // ================= Diagnostic : journal, rapport de page, garde-fou =================
+  // Le journal part vers le service worker par petits paquets (voir background/diagnostics.js) ; le tableau de bord l'affiche.
+  const diagEvents = [];
+  let diagTimer = null;
+  let translatedNodesCount = 0; // nœuds texte que nous avons traduits dans cette page
+
+  function diagLog(type, data) {
+    try {
+      if (twpConfig.get("diagnostics") === "no") return;
+      diagEvents.push({ type, data });
+      if (diagEvents.length > 100) diagEvents.shift();
+      if (!diagTimer) diagTimer = setTimeout(diagFlush, 1000);
+    } catch (e) {
+      /* le journal ne doit jamais gêner la traduction */
+    }
+  }
+  function diagFlush() {
+    diagTimer = null;
+    if (diagEvents.length === 0) return;
+    const entries = diagEvents.splice(0);
+    try {
+      chrome.runtime.sendMessage({ action: "twpLog", entries }, () => void chrome.runtime.lastError);
+    } catch (e) {
+      /* extension rechargée : on ignore */
+    }
+  }
+
+  const stuckMs = () => Number(twpConfig.get("diagStuckMs")) || 45000; // un envoi sans réponse au-delà est considéré bloqué
+
+  function elementPath(el) {
+    const parts = [];
+    for (let n = el; n && n.nodeType === 1 && parts.length < 4; n = n.parentElement) {
+      let s = n.nodeName.toLowerCase();
+      if (n.id) s += "#" + n.id;
+      else if (n.classList && n.classList.length) s += "." + n.classList[0];
+      parts.unshift(s);
+    }
+    return parts.join(" > ");
+  }
+
+  // Pourquoi ce texte n'est volontairement pas traduit (null = rien ne l'en empêche). Reprend les règles de lecture de la page.
+  function excludedReason(node) {
+    for (let el = node.parentElement; el; el = el.parentElement) {
+      const name = el.nodeName.toLowerCase();
+      if (htmlTagsNoTranslate.indexOf(name) !== -1) return "tag <" + name + ">";
+      if (el.isContentEditable) return "editable area";
+      if (el.classList && el.classList.contains("notranslate")) return "class notranslate (set by the site)";
+      if (el.getAttribute && el.getAttribute("translate") === "no") return 'translate="no" (set by the site)';
+      if (htmlTagsInlineIgnore.indexOf(name) !== -1 && name !== "br" && name !== "wbr" && !isProseCode(el)) return "code (not prose)";
+    }
+    return null;
+  }
+
+  // Rapport détaillé de l'état de la page : pour chaque texte pas encore traduit, la raison.
+  function buildPageReport() {
+    const now = Date.now();
+    const nodes = [];
+    const collect = (root) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      let n;
+      while ((n = walker.nextNode()) && nodes.length < 6000) {
+        if (n.nodeType === 3) {
+          if (n.nodeValue.trim().length >= 2) nodes.push(n);
+        } else if (n.shadowRoot) {
+          collect(n.shadowRoot);
+        }
+      }
+    };
+    collect(document.body);
+
+    const pieceOf = new Map();
+    piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((nd) => pieceOf.set(nd, ptt)));
+
+    const counts = {};
+    const excluded = {};
+    const examples = {};
+    const add = (category, node, extra) => {
+      counts[category] = (counts[category] || 0) + 1;
+      const list = (examples[category] = examples[category] || []);
+      if (list.length < 8) list.push({ text: node.nodeValue.trim().slice(0, 70), path: elementPath(node.parentElement), ...extra });
+    };
+
+    for (const node of nodes) {
+      const parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest("script,style,noscript,[data-twp-panel],[data-twp-dock],[data-twp-bubble]")) continue;
+      if (writtenText.has(node)) {
+        counts.translated = (counts.translated || 0) + 1;
+        continue;
+      }
+      const why = excludedReason(node);
+      if (why) {
+        excluded[why] = (excluded[why] || 0) + 1;
+        add("excluded", node, { why });
+        continue;
+      }
+      const ptt = pieceOf.get(node);
+      if (ptt) {
+        const dist = Math.round(distanceToScreen(ptt));
+        if (!ptt.isTranslated) {
+          if ((ptt.retries || 0) > MAX_PIECE_RETRIES) add("retriesExhausted", node, { retries: ptt.retries });
+          else if (ptt.retryAt > now) add("waitingRetry", node, { retries: ptt.retries || 0, inMs: ptt.retryAt - now });
+          else add("queued", node, { distancePx: dist >= 1e9 ? "hidden" : dist });
+        } else if (!ptt.done) {
+          add("inFlight", node, { sentMsAgo: ptt.sentAt ? now - ptt.sentAt : null, priority: ptt.priority });
+        } else {
+          add("answeredUnchanged", node, { note: "the engine answered but the text is the same (already in the target language, or untranslatable)" });
+        }
+      } else if (seenTextNodes.has(node)) {
+        add("seenWithoutPiece", node, {});
+      } else {
+        add("unseen", node, { note: "not yet picked up: the safety sweep takes it within 4 s" });
+      }
+    }
+
+    const pieces = piecesToTranslate;
+    return {
+      url: location.href,
+      host: location.hostname,
+      pageState: pageLanguageState,
+      service: currentPageTranslatorService,
+      target: currentTargetLanguage,
+      flags: {
+        dynamicContent: twpConfig.get("translateDynamicallyCreatedContent"),
+        iframes: twpConfig.get("enableIframePageTranslation"),
+        diagnostics: twpConfig.get("diagnostics"),
+      },
+      pieces: {
+        total: pieces.length,
+        pending: pieces.filter((x) => !x.isTranslated).length,
+        inFlight: pieces.filter((x) => x.isTranslated && !x.done && x.sentAt).length,
+        done: pieces.filter((x) => x.done).length,
+        highInFlight,
+        lowInFlight,
+      },
+      translatedNodes: translatedNodesCount,
+      textNodesScanned: nodes.length,
+      counts,
+      excluded,
+      examples,
+      frame: window === window.top ? "top" : "sub",
+    };
+  }
+
+  // Garde-fou : tout ce qui est parti sans réponse depuis trop longtemps est remis dans la file, les compteurs bloqués sont remis
+  // à zéro, et un blocage est consigné avec son état.
+  let watchdogTimerHandler;
+  let lastSentAt = 0;
+  let lastProgressKey = "";
+  function watchdog() {
+    if (pageLanguageState !== "translated") return;
+    const now = Date.now();
+    let stuck = 0;
+    for (const ptt of piecesToTranslate) {
+      if (ptt.isTranslated && ptt.sentAt && !ptt.done && now - ptt.sentAt > stuckMs()) {
+        ptt.isTranslated = false;
+        ptt.sentAt = 0;
+        ptt.retries = (ptt.retries || 0) + 1;
+        ptt.retryAt = now + 1000;
+        stuck++;
+      }
+    }
+    if (stuck) diagLog("guard.stuck-pieces", { pieces: stuck, afterMs: stuckMs() });
+    if ((highInFlight > 0 || lowInFlight) && lastSentAt && now - lastSentAt > stuckMs()) {
+      diagLog("guard.inflight-reset", { highInFlight, lowInFlight });
+      highInFlight = 0;
+      lowInFlight = false;
+    }
+    const pending = piecesToTranslate.filter((x) => !x.isTranslated).length;
+    const inFlight = piecesToTranslate.filter((x) => x.isTranslated && !x.done && x.sentAt).length;
+    const exhausted = piecesToTranslate.filter((x) => !x.isTranslated && (x.retries || 0) > MAX_PIECE_RETRIES).length;
+    if (pending > 0 && highInFlight === 0 && !lowInFlight && lastSentAt && now - lastSentAt > 20000) {
+      diagLog("guard.stall", { pending, exhausted, waitingRetry: piecesToTranslate.filter((x) => !x.isTranslated && x.retryAt > now).length });
+      lastHighSentAt = 0; // le travail de fond reprend sans attendre
+    }
+    const key = [piecesToTranslate.length, pending, inFlight, exhausted, translatedNodesCount].join("/");
+    if (key !== lastProgressKey) {
+      lastProgressKey = key;
+      diagLog("page.progress", { pieces: piecesToTranslate.length, pending, inFlight, exhausted, translatedNodes: translatedNodesCount, high: highInFlight, low: lowInFlight });
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "twpPageReport") {
+      try {
+        sendResponse(buildPageReport());
+      } catch (e) {
+        sendResponse({ error: String((e && e.message) || e) });
+      }
+    } else if (request.action === "twpPageScan") {
+      lastHighSentAt = 0;
+      sweepForMissedText();
+      sendResponse(true);
+    }
+  });
+
   // Textes déjà pris en charge (collectés, ou écrits par nous). Sert à repérer ceux qui ont échappé à la traduction :
   // texte ajouté après coup, texte modifié par la page, texte dans une zone isolée (shadow DOM)...
   let seenTextNodes = new WeakSet();
@@ -513,6 +709,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   function enableMutatinObserver() {
     disableMutatinObserver();
+    watchdogTimerHandler = setInterval(watchdog, Number(twpConfig.get("diagWatchdogMs")) || 5000);
 
     if (twpConfig.get("translateDynamicallyCreatedContent") == "yes") {
       translateNewNodesTimerHandler = setInterval(translateNewNodes, 2000);
@@ -525,6 +722,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   function disableMutatinObserver() {
     clearInterval(translateNewNodesTimerHandler);
     clearInterval(sweepTimerHandler);
+    clearInterval(watchdogTimerHandler);
     mutationObserverActive = false;
     newNodes = [];
     removedNodes = [];
@@ -922,6 +1120,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
 
     markSeen(node);
+    translatedNodesCount++;
     const writtenNode = node.nodeType === 3 ? node : node.firstChild;
     if (writtenNode && writtenNode.nodeType === 3) writtenText.set(writtenNode, writtenNode.nodeValue);
   }
@@ -941,6 +1140,9 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       if (ptt.retries <= MAX_PIECE_RETRIES) {
         ptt.isTranslated = false;
         ptt.retryAt = Date.now() + Math.min(30000, 2000 * 2 ** (ptt.retries - 1));
+        diagLog("page.retry", { reason: "no answer", attempt: ptt.retries });
+      } else {
+        diagLog("page.gave-up", { attempts: ptt.retries, chars: ptt.nodes.reduce((m, nd) => m + nd.textContent.length, 0) });
       }
     });
   }
@@ -955,6 +1157,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       const missing = ptt.nodes.filter((_, j) => !(typeof r[j] === "string" && r[j].length > 0));
       const tries = ptt.partialRetries || 0;
       if (missing.length === 0 || tries >= MAX_PIECE_RETRIES) return;
+      diagLog("page.retry", { reason: "partial answer", missingNodes: missing.length, of: ptt.nodes.length });
       piecesToTranslate.push({
         isTranslated: false,
         parentElement: ptt.parentElement,
@@ -1084,12 +1287,24 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   const LOW_BATCH_CHARS = 1500; // taille d'un lot de fond (un lot à la fois)
 
   function sendPieces(piecesNow, priority, currentFooCount) {
+    const tEnvoi = Date.now();
+    lastSentAt = tEnvoi;
     if (priority === "high") {
       highInFlight++;
-      lastHighSentAt = Date.now();
+      lastHighSentAt = tEnvoi;
     } else {
       lowInFlight = true;
     }
+    piecesNow.forEach((ptt) => {
+      ptt.sentAt = tEnvoi;
+      ptt.done = false;
+      ptt.priority = priority;
+    });
+    diagLog("page.send", {
+      priority,
+      pieces: piecesNow.length,
+      chars: piecesNow.reduce((n, ptt) => n + ptt.nodes.reduce((m, nd) => m + nd.textContent.length, 0), 0),
+    });
     backgroundTranslateHTML(
       currentPageTranslatorService,
       currentSourceLanguage,
@@ -1101,6 +1316,13 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       priority
     )
       .then((results) => {
+        piecesNow.forEach((ptt) => (ptt.done = true));
+        diagLog("page.result", {
+          priority,
+          pieces: piecesNow.length,
+          answered: Array.isArray(results) ? results.filter((r) => Array.isArray(r) && r.some((x) => typeof x === "string" && x.length > 0)).length : 0,
+          ms: Date.now() - tEnvoi,
+        });
         if (pageLanguageState === "translated" && currentFooCount === fooCount) {
           scheduleRetryOfFailedPieces(piecesNow, results);
           retryNodesWithoutTranslation(piecesNow, results);
@@ -1322,6 +1544,16 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     piecesToTranslate = getPiecesToTranslate();
     seenTextNodes = new WeakSet();
     piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((n) => seenTextNodes.add(n)));
+    translatedNodesCount = 0;
+    lastSentAt = 0;
+    lastProgressKey = "";
+    diagLog("page.start", {
+      pieces: piecesToTranslate.length,
+      nodes: piecesToTranslate.reduce((n, ptt) => n + ptt.nodes.length, 0),
+      service: currentPageTranslatorService,
+      target: currentTargetLanguage,
+      host: location.hostname,
+    });
     attributesToTranslate = getAttributesToTranslate();
 
     pageLanguageState = "translated";

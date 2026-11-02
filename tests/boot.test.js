@@ -105,8 +105,7 @@ test("le manifeste est valide et ne référence que des fichiers qui existent", 
   for (const f of fichiers) assert.ok(fs.existsSync(path.join(SRC, f)), "référencé mais absent : " + f);
   assert.deepEqual(m.permissions.sort(), ["alarms", "contextMenus", "storage"]);
   assert.equal(m.action, undefined);
-  assert.equal(m.options_ui.page, "dashboard/dashboard.html", "la page d'options est le tableau de bord");
-  assert.equal(m.options_ui.open_in_tab, true);
+  assert.equal(m.options_ui, undefined, "le tableau de bord s'ouvre en popup, pas en page d'options");
   assert.equal(m.commands, undefined);
 });
 

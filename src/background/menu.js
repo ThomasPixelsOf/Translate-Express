@@ -168,17 +168,18 @@ function openDock(tabId, view, draft) {
   else send();
 }
 
-// Tableau de bord (page d'options) dans un onglet ; s'il est déjà ouvert, on le remet devant. `tabId` = la page à examiner.
+// Tableau de bord dans une petite fenêtre popup (pas un onglet) ; si elle est déjà ouverte, on la réutilise.
+// `tabId` = la page à examiner.
 async function openDashboard(tabId) {
   const base = chrome.runtime.getURL("/dashboard/dashboard.html");
   const url = base + (tabId ? "?tab=" + tabId : "");
-  const tabs = await chrome.tabs.query({});
-  const existing = tabs.find((t) => t.url && t.url.startsWith(base));
+  const wins = await chrome.windows.getAll({ populate: true, windowTypes: ["popup"] });
+  const existing = wins.find((w) => (w.tabs || []).some((t) => t.url && t.url.startsWith(base)));
   if (existing) {
-    await chrome.tabs.update(existing.id, { active: true, url });
-    if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
+    await chrome.tabs.update(existing.tabs[0].id, { url });
+    await chrome.windows.update(existing.id, { focused: true });
   } else {
-    await chrome.tabs.create({ url });
+    await chrome.windows.create({ url, type: "popup", width: 560, height: 760 });
   }
 }
 
