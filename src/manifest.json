@@ -12,7 +12,7 @@
     "128": "/icons/icon-128.png"
   },
   "host_permissions": ["<all_urls>"],
-  "permissions": ["storage", "contextMenus"],
+  "permissions": ["storage", "contextMenus", "alarms"],
   "web_accessible_resources": [
     {
       "resources": ["/contentScript/css/*", "/_locales/*", "/composer/*", "/setup/*"],

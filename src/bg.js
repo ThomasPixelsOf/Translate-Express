@@ -11,3 +11,4 @@ importScripts("/background/llmService.js");
 importScripts("/background/skipTargetLanguage.js");
 importScripts("/background/translationService.js");
 importScripts("/background/menu.js");
+importScripts("/background/devReload.js");

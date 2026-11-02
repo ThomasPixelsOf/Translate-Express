@@ -56,6 +56,10 @@ Popup, page d'options, raccourcis, bouton flottant, traduction au survol, synth�
 
 La clé reste dans le stockage de l'extension ; elle n'est envoyée qu'à Groq. Le texte traduit part chez Groq : éviter les pages privées ou d'entreprise.
 
+## Rechargement automatique (développement)
+
+`src/background/devReload.js` surveille les fichiers de l'extension (Chrome et Brave les relisent sur le disque) et la recharge toute seule quand l'un d'eux change, au plus 30 secondes après : plus besoin du bouton « Recharger » de brave://extensions. Il reste à rafraîchir (F5) la page testée, car un onglet déjà ouvert garde l'ancien script de page. La langue choisie et la clé Groq sont dans le stockage de l'extension : un rechargement ne les efface pas. Pour désactiver : retirer la ligne `devReload.js` de `src/bg.js` et la permission `alarms` du manifeste.
+
 ## Mettre à jour depuis le dépôt d'origine
 
 ```

@@ -13,9 +13,10 @@ function fauxChrome() {
   const menus = [];
   const handlers = { onMessage: [], onClicked: [], onInstalled: [], onStartup: [] };
   const stockage = {};
-  const etat = { dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [] } };
+  const etat = { dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, alarms: [], reloaded: 0, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [], onAlarm: [] } };
   const chrome = {
     runtime: {
+      reload: () => { etat.reloaded = (etat.reloaded || 0) + 1; },
       onMessage: { addListener: (f) => handlers.onMessage.push(f) },
       onInstalled: { addListener: (f) => handlers.onInstalled.push(f) },
       onStartup: { addListener: (f) => handlers.onStartup.push(f) },
@@ -25,7 +26,7 @@ function fauxChrome() {
     },
     storage: {
       local: {
-        get: (cles, cb) => cb && cb({ ...stockage }),
+        get: (cles, cb) => (cb ? cb({ ...stockage }) : Promise.resolve({ ...stockage })),
         set: (o, cb) => { Object.assign(stockage, o); cb && cb(); return Promise.resolve(); },
         remove: (k, cb) => { delete stockage[k]; cb && cb(); },
       },
@@ -38,6 +39,7 @@ function fauxChrome() {
       update: (id, p, cb) => { const m = menus.find((x) => x.id === id); if (m) Object.assign(m, p); cb && cb(); },
       onClicked: { addListener: (f) => handlers.onClicked.push(f) },
     },
+    alarms: { create: (n, o) => etat.alarms.push({ n, o }), onAlarm: { addListener: (f) => etat.listeners.onAlarm.push(f) } },
     tabs: {
       sendMessage: (id, msg, opts, cb) => {
         etat.tabMessages.push({ id, msg });
@@ -96,7 +98,7 @@ test("le manifeste est valide et ne référence que des fichiers qui existent", 
     ...m.content_scripts.flatMap((c) => c.js),
   ];
   for (const f of fichiers) assert.ok(fs.existsSync(path.join(SRC, f)), "référencé mais absent : " + f);
-  assert.deepEqual(m.permissions.sort(), ["contextMenus", "storage"]);
+  assert.deepEqual(m.permissions.sort(), ["alarms", "contextMenus", "storage"]);
   assert.equal(m.action, undefined);
   assert.equal(m.options_ui, undefined);
   assert.equal(m.commands, undefined);
@@ -320,4 +322,66 @@ test("langue par défaut : le français, quelle que soit la langue du navigateur
 test("une ancienne langue par défaut enregistrée (anglais) est remplacée par le français tant que l'utilisateur n'a rien choisi", async () => {
   const { sandbox } = await demarrerAvecLangues("en", ["en"], ({ stockage }) => { stockage.targetLanguage = "en"; });
   assert.equal(langueCible(sandbox), "fr");
+});
+
+// Fichiers de l'extension tels que le navigateur les servirait (lus dans le dossier src).
+function servirFichiers(sandbox, modifications = {}) {
+  sandbox.fetch = async (url) => {
+    const chemin = String(url).replace("chrome-extension://test", "");
+    const contenu = chemin in modifications ? modifications[chemin] : fs.readFileSync(path.join(SRC, chemin), "utf8");
+    return { ok: true, text: async () => contenu };
+  };
+}
+
+test("rechargement automatique : l'extension se recharge quand un de ses fichiers change, et seulement alors", async () => {
+  const { sandbox, etat } = demarrer();
+  const modifications = {};
+  servirFichiers(sandbox, modifications);
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 300)); // empreinte initiale mémorisée
+  assert.equal(etat.reloaded, 0, "pas de rechargement au premier démarrage");
+  assert.deepEqual(etat.alarms.map((a) => a.n), ["twp-dev-reload"]);
+
+  const sonner = async () => { etat.listeners.onAlarm.forEach((f) => f({ name: "twp-dev-reload" })); await new Promise((r) => setTimeout(r, 300)); };
+  await sonner();
+  assert.equal(etat.reloaded, 0, "rien n'a changé : pas de rechargement");
+
+  modifications["/background/menu.js"] = fs.readFileSync(path.join(SRC, "background/menu.js"), "utf8") + " // modification";
+  await sonner();
+  assert.equal(etat.reloaded, 1, "un fichier a changé : rechargement");
+  await sonner();
+  assert.equal(etat.reloaded, 1, "l'empreinte est mémorisée : un seul rechargement par modification");
+});
+
+test("rechargement automatique : la liste des fichiers surveillés couvre tous les fichiers de l'extension", () => {
+  const { sandbox } = demarrer();
+  chargerBg(sandbox);
+  const surveilles = new Set(JSON.parse(vm.runInContext("JSON.stringify(DEV_FILES)", sandbox)));
+  const presents = [];
+  (function lister(dir) {
+    for (const e of fs.readdirSync(path.join(SRC, dir), { withFileTypes: true })) {
+      const rel = dir + "/" + e.name;
+      if (e.isDirectory()) { if (e.name !== "_locales" && e.name !== "icons") lister(rel); }
+      else if (/.(js|html|css|json)$/.test(e.name)) presents.push(rel);
+    }
+  })("");
+  const manquants = presents.filter((f) => !surveilles.has(f));
+  assert.deepEqual(manquants, [], "fichiers non surveillés (ajoutez-les à DEV_FILES) : " + manquants.join(", "));
+});
+
+test("rechargement de l'extension : la langue choisie est gardée, et sans choix la langue reste le français (jamais l'anglais)", async () => {
+  // 1) première session : l'utilisateur choisit le japonais dans le menu
+  const session1 = await demarrerAvecLangues("en", ["en", "fr"]);
+  session1.handlers.onInstalled.forEach((f) => f());
+  assert.equal(langueCible(session1.sandbox), "fr", "par défaut : français, même avec un navigateur en anglais");
+  session1.handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-ja", frameId: 0 }, { id: 1 }));
+  const stockageApresChoix = { ...session1.stockage };
+
+  // 2) rechargement : un nouveau service worker, le même stockage
+  const session2 = await demarrerAvecLangues("en", ["en", "fr"], ({ stockage }) => Object.assign(stockage, stockageApresChoix));
+  assert.equal(langueCible(session2.sandbox), "ja", "le choix survit au rechargement");
+
+  // 3) autre utilisateur qui n'a rien choisi, avec un vieux défaut « en » enregistré : retour au français
+  const session3 = await demarrerAvecLangues("en", ["en"], ({ stockage }) => { stockage.targetLanguage = "en"; });
+  assert.equal(langueCible(session3.sandbox), "fr");
 });
