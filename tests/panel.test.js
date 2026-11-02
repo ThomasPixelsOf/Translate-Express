@@ -228,3 +228,54 @@ test("the bubble shows the extension's logo, and falls back to a letter without 
     assert.equal(page.bubble().shadowRoot.querySelector("button").textContent, "A", "and the letter takes over");
   } finally { page.w.close(); }
 });
+
+test("a selection made without the mouse (Ctrl+A, touch, script) also shows the logo once it settles", { skip: skipReason }, async () => {
+  const page = createPage();
+  try {
+    const node = page.doc.getElementById("p").firstChild;
+    const r = page.doc.createRange(); r.setStart(node, 0); r.setEnd(node, 7);
+    page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
+    page.doc.dispatchEvent(new page.w.Event("selectionchange"));
+    assert.ok(!page.bubble(), "not at once: the selection may still be changing");
+    await wait(450);
+    assert.ok(page.bubble(), "the logo appears after the selection has settled");
+    page.w.getSelection().removeAllRanges();
+    page.doc.dispatchEvent(new page.w.Event("selectionchange"));
+    assert.ok(!page.bubble(), "and goes away with the selection");
+  } finally { page.w.close(); }
+});
+
+test("a page that erases the document's listeners (rich editors rewrite their frame) does not stop the logo", { skip: skipReason }, async () => {
+  const page = createPage();
+  try {
+    // what TinyMCE does to its editing frame: document.open() + write() + close()
+    page.doc.open();
+    page.doc.write('<html><body><p id="p">Hello again, this is the rewritten page.</p></body></html>');
+    page.doc.close();
+    await wait(1200); // the listeners are attached again within a second
+    const node = page.doc.getElementById("p").firstChild;
+    const r = page.doc.createRange(); r.setStart(node, 0); r.setEnd(node, 11);
+    page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
+    page.release();
+    await wait(60);
+    assert.ok(page.bubble(), "the logo still appears after the page rewrote its document");
+  } finally { page.w.close(); }
+});
+
+test("a text field inside a shadow root (web components) gets the logo too", { skip: skipReason }, async () => {
+  const page = createPage();
+  try {
+    const host = page.doc.createElement("div");
+    page.doc.body.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    const area = page.doc.createElement("textarea");
+    area.value = "Bonjour a tous, voici un message";
+    root.appendChild(area);
+    area.focus();
+    area.setSelectionRange(0, 7);
+    assert.equal(page.doc.activeElement, host, "the page-level focus only points at the host");
+    page.release();
+    await wait(60);
+    assert.ok(page.bubble(), "the field inside the shadow root is found through the host");
+  } finally { page.w.close(); }
+});

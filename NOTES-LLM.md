@@ -103,6 +103,17 @@ What is done (all covered by `tests/security.test.js` and `tests/llmService.test
 
 What is not done, and why: the key is stored in clear in the browser profile. An extension cannot protect a secret from someone who has access to the profile or from malware on the machine: encrypting it would need a key stored next to it (obfuscation, not security) or a passphrase typed at every browser start. Use a dedicated Groq key that you can revoke from Groq's console.
 
+## Selection logo: which pages and editors it works on
+
+The logo must appear wherever text can be selected, not on a list of known sites. What makes that hold (`src/contentScript/panel.js`, tests in `tests/panel.test.js`):
+
+- **Frames**: the scripts run in every frame, including the `about:blank`, `srcdoc`, `blob` and `data` frames that rich-text editors (TinyMCE, CKEditor, Summernote...) create for their editing area (`all_frames`, `match_about_blank` and `match_origin_as_fallback` in the manifest).
+- **Pages that erase listeners**: a rich editor writes its frame with `document.open()`, which removes the listeners of its document. The extension's listeners are attached to the window in the capture phase and attached again every second (attaching the same function twice has no effect), so a rewritten frame is picked up again.
+- **Selections made without the mouse**: Ctrl+A, touch, a script, an editor that hides mouse events. The `selectionchange` event shows the logo once the selection has settled for 350 ms and no mouse button is pressed.
+- **Shadow DOM**: the focused field and the selection are looked up through open shadow roots, since the page-level focus and selection only point at the host element.
+
+Not covered: closed shadow roots and canvas-based editors (Google Docs draws its text itself, so there is no selectable text to read).
+
 ## Interface language
 
 The extension's own texts (right-click menu, popup, panel next to the selection, message view, settings, dashboard labels) are available in English and French, chosen in **Settings, Interface language**: "Browser language (default)" follows the browser when the language is available and falls back to English; any other choice applies right away to the popup, the menu and the panel. The findings and the copied report of the dashboard stay in English (they are technical).

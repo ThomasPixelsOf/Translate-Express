@@ -25,7 +25,7 @@
   let timer = null;
   let ticket = 0;
 
-  // ---- champs de saisie ----
+  // ---- input fields ----
   function isEditable(el) {
     if (!el || el.nodeType !== 1) return false;
     if (el.isContentEditable) return true;
@@ -35,6 +35,27 @@
       return ["text", "search", "email", "url", ""].includes(type) && !el.readOnly && !el.disabled;
     }
     return false;
+  }
+  // The element that has the focus, going down through open shadow roots (components built with shadow DOM).
+  function activeDeep() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+    return el;
+  }
+  // The current selection; inside an open shadow root the page-level selection only points at the host, so the
+  // shadow root's own selection (Chromium) is used when it has one.
+  function currentSelection() {
+    let root = document;
+    let el = document.activeElement;
+    while (el && el.shadowRoot) {
+      root = el.shadowRoot;
+      el = root.activeElement;
+    }
+    if (root !== document && typeof root.getSelection === "function") {
+      const inner = root.getSelection();
+      if (inner && inner.rangeCount && !inner.isCollapsed) return inner;
+    }
+    return window.getSelection();
   }
   // For a rich editor, the outermost contenteditable element.
   function editableRoot(el) {
@@ -55,8 +76,8 @@
       const b = el.selectionEnd;
       return a != null && b != null && b > a ? el.value.slice(a, b) : "";
     }
-    const sel = window.getSelection();
-    return sel && !sel.isCollapsed && el.contains(sel.anchorNode) ? sel.toString() : "";
+    const sel = currentSelection();
+    return sel && !sel.isCollapsed && (el.contains(sel.anchorNode) || (el.shadowRoot && el.shadowRoot.contains(sel.anchorNode))) ? sel.toString() : "";
   }
 
   function setNativeValue(el, text) {
@@ -379,7 +400,7 @@
   // What is selected and where: { text, rect, field, start, end } or null.
   function readSelection() {
     // In an input field (input, textarea) the browser does not expose the selection through window.getSelection().
-    const active = editableRoot(document.activeElement);
+    const active = editableRoot(activeDeep());
     if (active && isFormField(active) && isEditable(active)) {
       const a = active.selectionStart;
       const b = active.selectionEnd;
@@ -388,7 +409,7 @@
       if (text.length < BUBBLE_MIN_CHARS) return null;
       return { text: text.slice(0, BUBBLE_MAX_CHARS), rect: rectNearPointer(active), field: active, start: a, end: b };
     }
-    const sel = window.getSelection();
+    const sel = currentSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const anchor = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
     // Not in our own panels; not in a password field.
@@ -471,72 +492,85 @@
     bubble.timer = setTimeout(hideBubble, 8000); // the bubble disappears by itself
   }
 
-  // Wait for the end of the gesture (mouse released or key released) before showing the bubble.
-  document.addEventListener("mouseup", (e) => {
-    if (e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) return;
-    setTimeout(showBubble, 10);
-  }, true);
-  document.addEventListener("keyup", (e) => {
-    if (e.shiftKey || e.key === "Shift") setTimeout(showBubble, 10);
-  }, true);
-  document.addEventListener("mousedown", (e) => {
-    if (!e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) hideBubble();
-  }, true);
-  document.addEventListener("selectionchange", () => {
-    if (bubble && !readSelection()) hideBubble();
-  });
-  // Mouse position: the bubble is placed near a selection made in a field.
-  document.addEventListener("mouseup", (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
-  window.addEventListener("scroll", () => hideBubble(), true);
-
   // ---- events ----
+  // The listeners are attached to the window, in the capture phase, and attached again every second: a page can erase
+  // the listeners of its document (a rich-text editor such as TinyMCE writes its editing frame with document.open),
+  // and the extension would then stop seeing the selections made there. Attaching the same function twice has no effect.
+  let pointerDown = false;
+  let selectionTimer = null;
+  const inBubble = (e) => e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"));
+
+  // Wait for the end of the gesture (mouse released or key released) before showing the bubble.
+  const onMouseUp = (e) => {
+    pointerDown = false;
+    lastPointer = { x: e.clientX, y: e.clientY }; // the bubble is placed near a selection made in a field
+    if (inBubble(e)) return;
+    setTimeout(showBubble, 10);
+  };
+  const onKeyUp = (e) => {
+    if (e.shiftKey || e.key === "Shift") setTimeout(showBubble, 10);
+  };
+  const onMouseDown = (e) => {
+    pointerDown = true;
+    if (!inBubble(e)) hideBubble();
+    if (open && host && !e.composedPath().includes(host)) show(false);
+  };
+  // A selection made without the mouse or Shift (Ctrl+A, a double click in an editor that hides the mouse events, touch,
+  // a script): the logo appears once the selection has settled.
+  const onSelectionChange = () => {
+    if (bubble && !readSelection()) return hideBubble();
+    clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(() => {
+      if (!pointerDown) showBubble();
+    }, 350);
+  };
   // The target field is the one that was right-clicked (or had the focus).
-  document.addEventListener(
-    "contextmenu",
-    (e) => {
-      const el = editableRoot(e.target);
-      if (isEditable(el)) field = el;
-    },
-    true
-  );
-  document.addEventListener(
-    "focusin",
-    (e) => {
-      const el = editableRoot(e.target);
-      if (isEditable(el) && el !== host) field = el;
-    },
-    true
-  );
+  const onContextMenu = (e) => {
+    const el = editableRoot(e.target);
+    if (isEditable(el)) field = el;
+  };
+  const onFocusIn = (e) => {
+    const el = editableRoot(e.target);
+    if (isEditable(el) && el !== host) field = el;
+  };
   // While the panel is open on a field, the translation follows what is being typed.
-  document.addEventListener(
-    "input",
-    (e) => {
-      if (open && mode === "field" && editableRoot(e.target) === field) {
-        clearTimeout(timer);
-        timer = setTimeout(translateNow, DELAY_MS);
-      }
-    },
-    true
-  );
-  document.addEventListener(
-    "keydown",
-    (e) => {
-      if (e.key === "Escape" && open) show(false);
-    },
-    true
-  );
-  document.addEventListener(
-    "mousedown",
-    (e) => {
-      if (open && host && !e.composedPath().includes(host)) show(false);
-    },
-    true
-  );
-  window.addEventListener("scroll", () => {
+  const onInput = (e) => {
+    if (open && mode === "field" && editableRoot(e.target) === field) {
+      clearTimeout(timer);
+      timer = setTimeout(translateNow, DELAY_MS);
+    }
+  };
+  const onKeyDown = (e) => {
+    if (e.key === "Escape" && open) show(false);
+  };
+  const onScroll = () => {
+    hideBubble();
     anchorOverride = null; // after scrolling, realign on the current selection
     place();
-  }, true);
-  window.addEventListener("resize", place);
+  };
+
+  function attachListeners() {
+    for (const [type, fn] of [
+      ["mouseup", onMouseUp],
+      ["keyup", onKeyUp],
+      ["mousedown", onMouseDown],
+      ["contextmenu", onContextMenu],
+      ["focusin", onFocusIn],
+      ["input", onInput],
+      ["keydown", onKeyDown],
+      ["scroll", onScroll],
+    ]) {
+      window.addEventListener(type, fn, true);
+    }
+    window.addEventListener("resize", place);
+    document.addEventListener("selectionchange", onSelectionChange);
+  }
+  attachListeners();
+  // An orphaned script (the extension was reloaded) stops: its chrome.runtime is gone.
+  const reattach = setInterval(() => {
+    if (chrome.runtime && chrome.runtime.id) attachListeners();
+    else clearInterval(reattach);
+  }, 1000);
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "twpPanel") {
