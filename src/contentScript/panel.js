@@ -8,7 +8,6 @@
   if (window.__twpPanel) return;
   window.__twpPanel = true;
 
-  const KEY_TARGET = "twpPanelTarget";
   const DELAY_MS = 500;
 
   let field = null; // dernier champ de saisie rencontré
@@ -138,12 +137,9 @@
       o.textContent = names[code];
       ui.lang.appendChild(o);
     }
-    let saved = null;
-    try {
-      saved = localStorage.getItem(KEY_TARGET);
-    } catch (e) {}
+    // La langue cible est la même partout (menu, page, fenêtre de message) : celle de twpConfig.
     const ui2 = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
-    ui.lang.value = saved || twpConfig.get("targetLanguage") || ui2;
+    ui.lang.value = twpConfig.get("targetLanguage") || ui2;
     if (!ui.lang.value) ui.lang.value = "en";
 
     // Un clic dans le panneau ne doit pas faire perdre sa sélection ou son curseur au champ de la page.
@@ -151,9 +147,7 @@
       if (e.target.tagName !== "SELECT") e.preventDefault();
     });
     ui.lang.addEventListener("change", () => {
-      try {
-        localStorage.setItem(KEY_TARGET, ui.lang.value);
-      } catch (e) {}
+      twpConfig.set("targetLanguage", ui.lang.value);
       translateNow();
     });
     ui.replace.addEventListener("click", () => {
@@ -272,6 +266,13 @@
     }
     place();
   }
+
+  twpConfig.onChanged((name, value) => {
+    if (name === "targetLanguage" && ui && value && ui.lang.value !== value) {
+      ui.lang.value = value;
+      if (open) translateNow();
+    }
+  });
 
   // ---- événements ----
   // Le champ visé est celui sur lequel on fait le clic droit (ou qui avait le focus).

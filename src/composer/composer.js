@@ -5,7 +5,6 @@
   "use strict";
   const $ = (s) => document.querySelector(s);
   const DELAY_MS = 450;
-  const KEY_TARGET = "composerTarget";
   const KEY_SOURCE = "composerSource";
   const KEY_TONE = "composerTone";
 
@@ -114,7 +113,7 @@
     fillLanguages($("#target"), false);
     $("#source").value = remembered(KEY_SOURCE, "auto");
     const ui = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
-    $("#target").value = remembered(KEY_TARGET, twpConfig.get("targetLanguage") || ui);
+    $("#target").value = twpConfig.get("targetLanguage") || ui;
     $("#tone").value = remembered(KEY_TONE, "");
 
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
@@ -128,7 +127,7 @@
       run();
     };
     $("#target").onchange = () => {
-      remember(KEY_TARGET, $("#target").value);
+      twpConfig.set("targetLanguage", $("#target").value);
       run();
     };
     $("#tone").onchange = () => {
@@ -142,7 +141,7 @@
       $("#source").value = $("#target").value;
       $("#target").value = src;
       remember(KEY_SOURCE, $("#source").value);
-      remember(KEY_TARGET, $("#target").value);
+      twpConfig.set("targetLanguage", $("#target").value);
       $("#input").value = out;
       run();
     };

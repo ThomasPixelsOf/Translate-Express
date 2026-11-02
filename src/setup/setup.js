@@ -65,7 +65,26 @@
     setStatus("Key removed: the free translator is used again.");
   }
 
+  // Langue cible : une seule pour toute l'extension, enregistrée dès qu'on la change.
+  function initLanguage() {
+    const select = $("#language");
+    const names = twpLang.getLanguageList();
+    for (const code of twpLang.TargetLanguages) {
+      if (!names[code]) continue;
+      const o = document.createElement("option");
+      o.value = code;
+      o.textContent = names[code];
+      select.appendChild(o);
+    }
+    select.value = twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
+    select.onchange = () => {
+      twpConfig.set("targetLanguage", select.value);
+      setStatus("Language saved: " + names[select.value]);
+    };
+  }
+
   twpConfig.onReady(() => {
+    initLanguage();
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
     if (llm) {
       $("#key").value = llm.apiKey || "";

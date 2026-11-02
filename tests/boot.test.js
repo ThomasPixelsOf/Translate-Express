@@ -95,7 +95,9 @@ test("le service worker se charge sans erreur et crée le menu du clic droit", a
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
   const ids = menus.map((m) => m.id);
-  assert.deepEqual(ids, ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-key"]);
+  for (const id of ["twp-selection", "twp-field", "twp-page", "twp-composer", "twp-lang", "twp-key"]) assert.ok(ids.includes(id), "entrée absente : " + id);
+  assert.ok(ids.includes("twp-lang-en") && ids.includes("twp-lang-fr"), "langues courantes absentes");
+  assert.equal(menus.filter((m) => m.type === "radio" && m.checked).length, 1, "une seule langue cochée");
   assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
   assert.ok(handlers.onClicked.length >= 1);
 });
@@ -107,4 +109,16 @@ test("le menu bascule sur « Show original page » quand la page est traduite", 
   handlers.onInstalled.forEach((f) => f());
   handlers.onMessage.forEach((f) => f({ action: "setPageLanguageState", pageLanguageState: "translated" }, { tab: { id: 1 } }, () => {}));
   assert.equal(menus.find((m) => m.id === "twp-page").title, "Show original page");
+});
+
+test("choisir une langue dans le menu change la langue cible partout et met le menu à jour", async () => {
+  const { sandbox, menus, handlers } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  assert.match(menus.find((m) => m.id === "twp-lang").title, /Target language: /);
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-de", frameId: 0 }, { id: 1 }));
+  assert.equal(vm.runInContext('twpConfig.get("targetLanguage")', sandbox), "de");
+  assert.equal(menus.find((m) => m.id === "twp-lang-de").checked, true);
+  assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
 });

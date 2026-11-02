@@ -7,7 +7,11 @@
 //   partout                  -> « Message window » (écrire et voir la traduction en direct), « Groq key… »
 // Aucun réglage : langue cible = langue du navigateur, source détectée, IA si une clé Groq est enregistrée.
 
+// Langues proposées directement dans le menu ; la liste complète est dans « Language and Groq key... ».
+const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", "zh-CN", "ar"];
+
 const MENU = {
+  lang: "twp-lang",
   selection: "twp-selection",
   field: "twp-field",
   page: "twp-page",
@@ -39,7 +43,27 @@ function createMenus() {
       documentUrlPatterns: ["http://*/*", "https://*/*", "file://*/*"],
     });
     chrome.contextMenus.create({ id: MENU.composer, title: "Message window (live translation)", contexts: ["all"] });
-    chrome.contextMenus.create({ id: MENU.key, title: "Groq key...", contexts: ["all"] });
+
+    // Langue cible : une seule pour toute l'extension (page, panneau, fenêtre de message).
+    const current = targetLanguage();
+    const known = new Set(twpLang.TargetLanguages);
+    const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
+    chrome.contextMenus.create({
+      id: MENU.lang,
+      title: "Target language: " + twpLang.codeToLanguage(current),
+      contexts: ["all"],
+    });
+    for (const code of choices) {
+      chrome.contextMenus.create({
+        id: "twp-lang-" + code,
+        parentId: MENU.lang,
+        type: "radio",
+        checked: code === current,
+        title: twpLang.codeToLanguage(code),
+        contexts: ["all"],
+      });
+    }
+    chrome.contextMenus.create({ id: MENU.key, parentId: MENU.lang, title: "More languages, Groq key...", contexts: ["all"] });
   });
 }
 
@@ -84,6 +108,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     openComposer(tab.id);
   } else if (info.menuItemId === MENU.key) {
     openKeyPage();
+  } else if (String(info.menuItemId).startsWith("twp-lang-")) {
+    // Le menu est recréé par le rappel de changement de configuration ci-dessous.
+    twpConfig.set("targetLanguage", String(info.menuItemId).slice("twp-lang-".length));
   }
 });
 
@@ -126,3 +153,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(createMenus);
 chrome.runtime.onStartup.addListener(createMenus);
 twpConfig.onReady(createMenus);
+// Changement de langue (depuis le menu ou la page de réglage) : titres du menu mis à jour.
+twpConfig.onChanged((name) => {
+  if (name === "targetLanguage") createMenus();
+});

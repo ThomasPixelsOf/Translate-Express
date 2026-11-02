@@ -11,9 +11,10 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 | dans un champ de saisie | **Translate what I'm writing** | panneau avec la traduction en direct de ce qu'on écrit ; **Replace** remplace le texte du champ (ou la partie sélectionnée) |
 | sur la page | **Translate this page to ...** / **Show original page** | traduit toute la page, puis revient à l'original |
 | partout | **Message window (live translation)** | fenêtre : on écrit à gauche, la traduction arrive à droite en direct ; Copy (Ctrl+Entrée), Insert in the page |
-| partout | **Groq key...** | le seul réglage : coller sa clé Groq |
+| partout | **Target language: ...** | sous-menu : choisir la langue de traduction (11 langues courantes cochables) ; « More languages, Groq key... » ouvre la page complète |
+| partout | page « Language and Groq key » | la liste de toutes les langues et le champ de la clé Groq (facultatif) |
 
-Zéro réglage : langue cible = langue du navigateur (puis la dernière choisie dans le panneau), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
+Zéro réglage : langue cible = langue du navigateur au départ, puis celle qu'on choisit (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
 
 ## Ce qui a été retiré
 
