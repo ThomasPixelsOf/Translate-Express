@@ -110,6 +110,18 @@ La clé reste dans le stockage de l'extension ; elle n'est envoyée qu'à Groq. 
 
 `src/background/devReload.js` surveille les fichiers de l'extension (Chrome et Brave les relisent sur le disque) et la recharge toute seule quand l'un d'eux change, au plus 30 secondes après : plus besoin du bouton « Recharger » de brave://extensions. Il reste à rafraîchir (F5) la page testée, car un onglet déjà ouvert garde l'ancien script de page. La langue choisie et la clé Groq sont dans le stockage de l'extension : un rechargement ne les efface pas. Pour désactiver : retirer la ligne `devReload.js` de `src/bg.js` et la permission `alarms` du manifeste.
 
+## Diagnostics et tableau de bord
+
+Un journal (1000 derniers événements, stockage de session) enregistre les requêtes à l'IA (durée, attente du budget, jetons, 429), les appels de traduction, les envois et résultats de la page et les garde-fous (morceaux bloqués, blocage détecté). Réglage `diagnostics` = "no" pour le couper. Le tableau de bord s'ouvre en fenêtre popup (clic droit, « Dashboard (diagnostics) », aussi dans le menu de l'icône) : résumé avec constats en clair, état de la page (pourquoi chaque texte n'est pas traduit), journal filtrable, bouton « Copy report ». Calculs dans `src/dashboard/metrics.js` (testés).
+
+## Budget de jetons saturé
+
+Si une requête devait attendre plus de 12 s (texte visible) ou 2,5 s (fond de page) la place dans le budget de jetons, elle échoue tout de suite et le bloc part chez Google (événement `llm.budget-skip`). Le garde-fou de blocage de la page attend 90 s (`diagStuckMs`) pour ne pas renvoyer en double des morceaux qui patientent.
+
+## Thème
+
+Tout est sombre en permanence (message, réglages, tableau de bord, bulle, panneaux), quel que soit le thème du navigateur.
+
 ## Mettre à jour depuis le dépôt d'origine
 
 ```
