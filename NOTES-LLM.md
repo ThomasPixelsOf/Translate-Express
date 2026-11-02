@@ -25,6 +25,10 @@ TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté I
 
 L'état « page traduite ou non » est propre à chaque onglet : le titre de l'entrée du menu (« Translate this page to … » ou « Show original page ») est recalculé quand on change d'onglet ou de fenêtre, et un clic agit selon l'état de l'onglet cliqué. Une page qui se recharge redevient « à traduire ». L'état n'est jamais mémorisé dans le service worker : on le demande à l'onglet.
 
+## Page entièrement traduite (défauts d'origine corrigés)
+
+Le traducteur d'origine laissait des parties de page en version originale pour deux raisons, corrigées dans `pageTranslator.js` : (1) un morceau était marqué « traduit » avant l'envoi ; si la réponse échouait ou revenait vide, il n'était jamais réessayé — il l'est maintenant, jusqu'à 3 fois avec un délai croissant ; (2) un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé — tout morceau dont une partie est dans la zone visible l'est maintenant. Le texte est aussi traduit trois quarts d'écran à l'avance sous la zone visible, pour être déjà prêt quand on défile. `tests/page-translation.test.js` simule une page (jsdom) : ces tests échouent sur l'ancien code et réussissent sur le nouveau.
+
 ## Pages en plusieurs langues
 
 Les blocs de texte déjà écrits dans la langue cible ne sont pas retraduits : leur langue est détectée localement par le navigateur (sans réseau), et seuls les autres partent au traducteur. Une page moitié française, moitié anglaise, traduite en français, n'envoie que l'anglais ; une page déjà entièrement dans la langue cible n'appelle aucun traducteur. Les blocs de moins de 25 caractères ou dont la langue est incertaine sont traduits normalement (l'IA a aussi la consigne de laisser inchangé ce qui est déjà dans la langue cible). Le code est dans `src/background/skipTargetLanguage.js`.

@@ -860,7 +860,27 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
+  // Nombre de nouvelles tentatives d'un morceau dont la traduction a échoué (réponse absente ou vide).
+  const MAX_PIECE_RETRIES = 3;
+
+  // Le code d'origine marquait un morceau « traduit » avant d'envoyer la demande : si la réponse échouait, le morceau
+  // restait en version originale pour toujours (une partie de la page traduite, le reste non). Maintenant un morceau
+  // sans réponse est remis dans la file et réessayé après un délai croissant.
+  function scheduleRetryOfFailedPieces(piecesToTranslateNow, results) {
+    piecesToTranslateNow.forEach((ptt, i) => {
+      const r = Array.isArray(results) ? results[i] : null;
+      const answered = Array.isArray(r) && r.some((x) => typeof x === "string" && x.length > 0);
+      if (answered) return;
+      ptt.retries = (ptt.retries || 0) + 1;
+      if (ptt.retries <= MAX_PIECE_RETRIES) {
+        ptt.isTranslated = false;
+        ptt.retryAt = Date.now() + 1500 * ptt.retries;
+      }
+    });
+  }
+
   function translateResults(piecesToTranslateNow, results) {
+    if (!Array.isArray(results)) return;
     if (dontSortResults) {
       for (let i = 0; i < results.length; i++) {
         for (let j = 0; j < results[i].length; j++) {
@@ -969,6 +989,20 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
         (function () {
           if (piecesToTranslate.length < 1) return;
           const innerHeight = window.innerHeight;
+          // On traduit aussi trois quarts d'écran sous la zone visible : le texte est déjà traduit quand on défile.
+          const margin = Math.round(innerHeight * 0.75);
+          const now = Date.now();
+
+          // Un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé : on traduit tout morceau
+          // dont une partie, même petite, se trouve dans la zone visible (écran + marge).
+          function overlapsScreen(ptt) {
+            if (!ptt.topElement || !ptt.bottomElement) return false;
+            const a = ptt.topElement.getBoundingClientRect();
+            const b = ptt.bottomElement.getBoundingClientRect();
+            const start = Math.min(a.top, b.top);
+            const end = Math.max(a.bottom, b.bottom);
+            return end > start && start < innerHeight + margin && end > 0;
+          }
 
           function isInScreen(element) {
             const rect = element.getBoundingClientRect();
@@ -987,7 +1021,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
               return false;
             }
             const rect = element.getBoundingClientRect();
-            if (rect.top > 0 && rect.top <= innerHeight) {
+            if (rect.top > 0 && rect.top <= innerHeight + margin) {
               return true;
             }
             return false;
@@ -999,7 +1033,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
               return false;
             }
             const rect = element.getBoundingClientRect();
-            if (rect.bottom > 0 && rect.bottom <= innerHeight) {
+            if (rect.bottom > 0 && rect.bottom <= innerHeight + margin) {
               return true;
             }
             return false;
@@ -1009,10 +1043,11 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
           const piecesToTranslateNow = [];
           piecesToTranslate.forEach((ptt) => {
-            if (!ptt.isTranslated) {
+            if (!ptt.isTranslated && !(ptt.retryAt > now)) {
               if (
                 bottomIsInScreen(ptt.topElement) ||
-                topIsInScreen(ptt.bottomElement)
+                topIsInScreen(ptt.bottomElement) ||
+                overlapsScreen(ptt)
               ) {
                 ptt.isTranslated = true;
                 piecesToTranslateNow.push(ptt);
@@ -1050,6 +1085,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
                 pageLanguageState === "translated" &&
                 currentFooCount === fooCount
               ) {
+                scheduleRetryOfFailedPieces(piecesToTranslateNow, results);
                 translateResults(piecesToTranslateNow, results);
               }
             });
