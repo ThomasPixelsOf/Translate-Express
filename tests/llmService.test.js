@@ -283,7 +283,9 @@ test("priorité : une requête du reste de la page (low) cède la place à une r
     const d = envoyer("D", "high"); // arrive en dernier mais passe devant B et C
     await Promise.all([a, d, ...suite]);
     const ordre = appels.map((x) => JSON.parse(x.corps.messages[1].content)[0].slice(5, 6));
-    assert.deepEqual(ordre, ["A", "D", "B", "C"], "ce qui est visible passe devant le reste de la page : " + ordre.join(""));
+    // B et C (fond de page) attendent en parallèle : leur ordre entre eux n'est pas garanti, seul compte que D passe devant.
+    assert.deepEqual(ordre.slice(0, 2), ["A", "D"], "ce qui est visible passe devant le reste de la page : " + ordre.join(""));
+    assert.deepEqual(ordre.slice(2).sort(), ["B", "C"]);
   } finally {
     twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
   }
