@@ -72,6 +72,7 @@
     twpLang.fillLanguageSelect(select);
     select.value = twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
     select.onchange = () => {
+      twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", select.value);
       setStatus("Language saved: " + names[select.value]);
     };

@@ -22,6 +22,22 @@ const MENU = {
 
 let pageLanguageState = "original";
 
+// Langue par défaut = celle du navigateur (interface d'abord, puis langues préférées), tant que l'utilisateur n'a pas choisi.
+function detectBrowserLanguage(done) {
+  if (twpConfig.get("targetLanguageChosen") === "yes") return done();
+  chrome.i18n.getAcceptLanguages((accepted) => {
+    checkedLastError();
+    for (const raw of [chrome.i18n.getUILanguage(), ...(accepted || [])]) {
+      const code = twpLang.fixTLanguageCode(raw);
+      if (code) {
+        if (twpConfig.get("targetLanguage") !== code) twpConfig.set("targetLanguage", code);
+        break;
+      }
+    }
+    done();
+  });
+}
+
 function targetLanguage() {
   return twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
 }
@@ -143,6 +159,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     openDock(tab.id, "setup");
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {
     // Le menu est recréé par le rappel de changement de configuration ci-dessous.
+    twpConfig.set("targetLanguageChosen", "yes");
     twpConfig.set("targetLanguage", String(info.menuItemId).slice("twp-lang-".length));
   }
 });
@@ -187,9 +204,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-chrome.runtime.onInstalled.addListener(createMenus);
-chrome.runtime.onStartup.addListener(createMenus);
-twpConfig.onReady(createMenus);
+const start = () => twpConfig.onReady(() => detectBrowserLanguage(createMenus));
+chrome.runtime.onInstalled.addListener(start);
+chrome.runtime.onStartup.addListener(start);
+start();
 // Changement de langue (depuis le menu ou la page de réglage) : titres du menu mis à jour.
 twpConfig.onChanged((name) => {
   if (name === "targetLanguage") createMenus();

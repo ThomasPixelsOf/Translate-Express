@@ -113,6 +113,7 @@
       run();
     };
     $("#target").onchange = () => {
+      twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", $("#target").value);
       run();
     };
@@ -127,6 +128,7 @@
       $("#source").value = $("#target").value;
       $("#target").value = src;
       remember(KEY_SOURCE, $("#source").value);
+      twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", $("#target").value);
       $("#input").value = out;
       run();

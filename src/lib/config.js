@@ -6,7 +6,7 @@ const twpConfig = (function () {
   const defaultTargetLanguages = ["en", "es", "de"];
   /**
    * all configName available
-   * @typedef {"uiLanguage" | "pageTranslatorService" | "textTranslatorService" | "textToSpeechService" | "enabledServices" | "ttsSpeed" | "ttsVolume" | "targetLanguage" | "targetLanguageTextTranslation" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "sitesToTranslateWhenHovering" | "langsToTranslateWhenHovering" | "alwaysTranslateLangs" | "neverTranslateLangs" | "customDictionary" | "showTranslatePageContextMenu" | "showTranslateSelectedContextMenu" | "showButtonInTheAddressBar" | "showOriginalTextWhenHovering" | "showTranslateSelectedButton" | "whenShowMobilePopup" | "useOldPopup" | "darkMode" | "popupBlueWhenSiteIsTranslated" | "popupPanelSection" | "showReleaseNotes" | "dontShowIfIsNotValidText" | "dontShowIfPageLangIsTargetLang" | "dontShowIfPageLangIsUnknown" | "dontShowIfSelectedTextIsTargetLang" | "dontShowIfSelectedTextIsUnknown" | "hotkeys" | "expandPanelTranslateSelectedText" | "translateTag_pre" | "enableIframePageTranslation" | "dontSortResults" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "translateSelectedWhenPressTwice" | "translateTextOverMouseWhenPressTwice" | "translateClickingOnce" | "enableDiskCache" | "useAlternativeService" | "customServices" | "showMobilePopupOnDesktop" | "popupMobileKeepOnScren" | "popupMobilePosition" | "addPaddingToPage" | "proxyServers"} DefaultConfigNames
+   * @typedef {"uiLanguage" | "pageTranslatorService" | "textTranslatorService" | "textToSpeechService" | "enabledServices" | "ttsSpeed" | "ttsVolume" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageTextTranslation" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "sitesToTranslateWhenHovering" | "langsToTranslateWhenHovering" | "alwaysTranslateLangs" | "neverTranslateLangs" | "customDictionary" | "showTranslatePageContextMenu" | "showTranslateSelectedContextMenu" | "showButtonInTheAddressBar" | "showOriginalTextWhenHovering" | "showTranslateSelectedButton" | "whenShowMobilePopup" | "useOldPopup" | "darkMode" | "popupBlueWhenSiteIsTranslated" | "popupPanelSection" | "showReleaseNotes" | "dontShowIfIsNotValidText" | "dontShowIfPageLangIsTargetLang" | "dontShowIfPageLangIsUnknown" | "dontShowIfSelectedTextIsTargetLang" | "dontShowIfSelectedTextIsUnknown" | "hotkeys" | "expandPanelTranslateSelectedText" | "translateTag_pre" | "enableIframePageTranslation" | "dontSortResults" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "translateSelectedWhenPressTwice" | "translateTextOverMouseWhenPressTwice" | "translateClickingOnce" | "enableDiskCache" | "useAlternativeService" | "customServices" | "showMobilePopupOnDesktop" | "popupMobileKeepOnScren" | "popupMobilePosition" | "addPaddingToPage" | "proxyServers"} DefaultConfigNames
    */
   const defaultConfig = {
     uiLanguage: "default",
@@ -17,6 +17,7 @@ const twpConfig = (function () {
     ttsSpeed: 1.0,
     ttsVolume: 1.0,
     targetLanguage: null,
+    targetLanguageChosen: "no", // "yes" dès que l'utilisateur choisit lui-même la langue : on ne la détecte plus
     targetLanguageTextTranslation: null,
     targetLanguages: [], // "en", "es", "de"
     alwaysTranslateSites: [],
@@ -275,11 +276,9 @@ const twpConfig = (function () {
       }
       //*/
 
-      // if targetLanguage does not exits in targetLanguages, then set it to targetLanguages[0]
-      if (
-        !config.targetLanguage ||
-        config.targetLanguages.indexOf(config.targetLanguage) === -1
-      ) {
+      // Langue cible : on ne la remplace que si elle n'existe pas. (Avant : elle était aussi remplacée dès qu'elle
+      // n'était pas parmi les trois premières langues du navigateur, ce qui annulait tout choix à chaque redémarrage.)
+      if (!config.targetLanguage) {
         config.targetLanguage = config.targetLanguages[0];
       }
 
@@ -311,8 +310,8 @@ const twpConfig = (function () {
         config.targetLanguageTextTranslation
       );
 
-      // if targetLanguage does not exits in targetLanguages, then set it to targetLanguages[0]
-      if (config.targetLanguages.indexOf(config.targetLanguage) === -1) {
+      // Une langue valide choisie par l'utilisateur est gardée, même hors des trois langues du navigateur.
+      if (!config.targetLanguage) {
         config.targetLanguage = config.targetLanguages[0];
       }
       // if targetLanguageTextTranslation does not exits in targetLanguages, then set it to targetLanguages[0]

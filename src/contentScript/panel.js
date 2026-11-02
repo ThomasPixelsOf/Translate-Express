@@ -144,6 +144,7 @@
       if (e.target.tagName !== "SELECT") e.preventDefault();
     });
     ui.lang.addEventListener("change", () => {
+      twpConfig.set("targetLanguageChosen", "yes");
       twpConfig.set("targetLanguage", ui.lang.value);
       translateNow();
     });

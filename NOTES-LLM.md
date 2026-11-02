@@ -15,7 +15,7 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 | partout | **Target language: ...** | sous-menu : choisir la langue de traduction (11 langues courantes cochables) ; « More languages, Groq key... » ouvre la page complète |
 | partout | page « Language and Groq key » (dans le même volet) | la liste de toutes les langues et le champ de la clé Groq (facultatif) |
 
-Zéro réglage : langue cible = langue du navigateur au départ, puis celle qu'on choisit (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
+Zéro réglage : langue cible = langue de l'interface du navigateur au départ (sinon la première langue préférée), puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage) (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
 
 ## Ce qui a été retiré
 

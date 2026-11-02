@@ -225,3 +225,41 @@ test("si l'IA échoue, la page est traduite par Google au lieu de rester vide (r
   assert.ok(urls.some((u) => u.includes("chat/completions")), "l'IA a d'abord été essayée");
   assert.ok(urls.some((u) => /translate(-pa)?.googleapis.com/.test(u)), "puis Google a été essayé : " + urls.join(" | "));
 });
+
+// Démarre le service worker avec une langue d'interface et des langues préférées données.
+async function demarrerAvecLangues(ui, acceptees, avant) {
+  const r = demarrer();
+  r.sandbox.chrome.i18n.getUILanguage = () => ui;
+  r.sandbox.chrome.i18n.getAcceptLanguages = (cb) => cb(acceptees);
+  if (avant) avant(r);
+  chargerBg(r.sandbox);
+  await new Promise((res) => setTimeout(res, 80));
+  return r;
+}
+const langueCible = (sandbox) => vm.runInContext('twpConfig.get("targetLanguage")', sandbox);
+
+test("langue par défaut : celle de l'interface du navigateur, même si l'anglais est en tête des langues préférées", async () => {
+  const { sandbox } = await demarrerAvecLangues("fr-CH", ["en-US", "en", "fr-CH", "fr"]);
+  assert.equal(langueCible(sandbox), "fr");
+});
+
+test("langue par défaut : à défaut d'interface reconnue, la première langue préférée", async () => {
+  const { sandbox } = await demarrerAvecLangues("xx", ["de-CH", "en"]);
+  assert.equal(langueCible(sandbox), "de");
+});
+
+test("une langue choisie par l'utilisateur n'est plus jamais remplacée par la détection", async () => {
+  const { sandbox } = await demarrerAvecLangues("fr", ["fr"], ({ stockage }) => {
+    stockage.targetLanguage = "ja"; // hors des trois premières langues du navigateur
+    stockage.targetLanguageChosen = "yes";
+  });
+  assert.equal(langueCible(sandbox), "ja");
+});
+
+test("choisir une langue dans le menu l'enregistre comme choix de l'utilisateur", async () => {
+  const { sandbox, handlers } = await demarrerAvecLangues("fr", ["fr"]);
+  handlers.onInstalled.forEach((f) => f());
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-lang-ja", frameId: 0 }, { id: 1 }));
+  assert.equal(vm.runInContext('twpConfig.get("targetLanguageChosen")', sandbox), "yes");
+  assert.equal(langueCible(sandbox), "ja");
+});
