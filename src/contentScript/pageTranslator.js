@@ -372,6 +372,10 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       case "dontSortResults":
         dontSortResults = newvalue == "yes" ? true : false;
         break;
+      case "pageTranslatorService":
+        // Clé Groq enregistrée ou retirée pendant que la page est ouverte : on suit tout de suite.
+        currentPageTranslatorService = newvalue;
+        break;
     }
   });
 
@@ -1245,6 +1249,8 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "translatePage") {
+      // Le menu précise le service à utiliser (IA si une clé est enregistrée, sinon Google).
+      if (request.service) currentPageTranslatorService = request.service;
       if (request.targetLanguage === "original") {
         pageTranslator.restorePage();
       } else {

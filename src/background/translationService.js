@@ -980,6 +980,19 @@ const translationService = (function () {
           dontSaveInPersistentCache,
           request.dontSortResults,
         )
+        // Repli : si l'IA échoue (clé refusée, limite de débit, panne), la page est traduite par Google plutôt que de rester vide.
+        .catch((e) => {
+          if (request.translationService !== "llm") throw e;
+          console.warn("AI translation failed, falling back to the free translator:", e);
+          return translationService.translateHTML(
+            "google",
+            request.sourceLanguage,
+            request.targetLanguage,
+            request.sourceArray2d,
+            dontSaveInPersistentCache,
+            request.dontSortResults,
+          );
+        })
         .then((results) => sendResponse(results))
         .catch((e) => {
           sendResponse();

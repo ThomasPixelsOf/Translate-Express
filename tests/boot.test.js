@@ -54,7 +54,7 @@ function demarrer() {
     fetch: async () => { throw new Error("pas de réseau dans ce test"); },
     indexedDB: { open: () => ({}), deleteDatabase: () => ({}) },
     navigator: { userAgent: "Chrome/156", language: "fr" },
-    structuredClone, EventTarget, Event, Blob, atob, btoa, crypto: globalThis.crypto,
+    structuredClone, EventTarget, Event, CustomEvent, Blob, atob, btoa, crypto: globalThis.crypto,
   };
   sandbox.self = sandbox;
   sandbox.globalThis = sandbox;
@@ -180,4 +180,48 @@ test("la liste des langues : courantes d'abord, puis toutes de A à Z, sans doub
   assert.equal(new Set(r.toutes).size, r.toutes.length, "pas de doublon");
   assert.ok(r.toutes.length > 50);
   assert.ok(!r.toutes.some((n) => /emoji/i.test(n)), "« Emoji » n'est pas une langue");
+});
+
+// Envoie un message au fond comme le ferait un script de page, et renvoie la réponse (ou "PAS DE REPONSE").
+function envoyer(handlers, request) {
+  return new Promise((resolve) => {
+    let fini = false;
+    const fin = (r) => { if (!fini) { fini = true; resolve(r === undefined ? "REPONSE VIDE" : r); } };
+    for (const f of handlers.onMessage) f(request, { tab: { id: 1, url: "https://x.test/" } }, fin);
+    setTimeout(() => fin("PAS DE REPONSE"), 2000);
+  });
+}
+const cleLlm = { name: "llm", provider: "auto", apiKey: "gsk_1234567890abcdef", model: "" };
+
+test("le menu choisit le service : IA avec une clé enregistrée, Google sans clé", async () => {
+  const { sandbox, handlers, etat } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const cliquer = () => handlers.onClicked.forEach((f) => f({ menuItemId: "twp-page", frameId: 0 }, { id: 3 }));
+  cliquer();
+  assert.equal(etat.tabMessages.at(-1).msg.action, "translatePage");
+  assert.equal(etat.tabMessages.at(-1).msg.service, "google");
+  vm.runInContext("twpConfig.set('customServices', [" + JSON.stringify(cleLlm) + "])", sandbox);
+  cliquer();
+  assert.equal(etat.tabMessages.at(-1).msg.service, "llm");
+});
+
+test("si l'IA échoue, la page est traduite par Google au lieu de rester vide (repli)", async () => {
+  const { sandbox, handlers } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  vm.runInContext("translationCache.get = async () => null; translationCache.set = async () => {};", sandbox);
+  const urls = [];
+  sandbox.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).endsWith("/models")) return { ok: true, status: 200, json: async () => ({ data: [{ id: "qwen/qwen3.8-27b" }] }) };
+    if (String(url).includes("chat/completions")) return { ok: false, status: 401, headers: { get: () => null }, json: async () => ({ error: { message: "Invalid API Key" } }) };
+    throw new Error("réseau coupé");
+  };
+  vm.runInContext("twpConfig.set('customServices', [" + JSON.stringify(cleLlm) + "])", sandbox);
+  await envoyer(handlers, { action: "createLlmService", llm: cleLlm });
+  await envoyer(handlers, { action: "translateHTML", translationService: "llm", sourceLanguage: "en", targetLanguage: "fr", sourceArray2d: [["Hello"]], dontSortResults: false });
+  assert.ok(urls.some((u) => u.includes("chat/completions")), "l'IA a d'abord été essayée");
+  assert.ok(urls.some((u) => /translate(-pa)?.googleapis.com/.test(u)), "puis Google a été essayé : " + urls.join(" | "));
 });

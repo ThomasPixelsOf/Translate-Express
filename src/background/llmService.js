@@ -206,7 +206,9 @@ var twpLlm = (function () {
 
   // Découpe la réponse `<pre><a i=0>…</a><a i=1>…</a></pre>` en un tableau de textes, comme le fait le service Google.
   function decouperReponse(texte, dontSortResults, unescapeHTML) {
-    let t = String(texte);
+    // Une requête échouée donne `null` : c'est une erreur (le service appelant se replie sur Google), pas le texte « null ».
+    if (typeof texte !== "string") throw new Error("translation failed");
+    let t = texte;
     if (t.indexOf("<pre") !== -1) {
       t = t.replace("</pre>", "");
       t = t.slice(t.indexOf(">") + 1);

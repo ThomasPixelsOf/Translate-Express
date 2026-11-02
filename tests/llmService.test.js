@@ -135,3 +135,9 @@ test("translateFree : texte libre, consigne de ton, protection contre les instru
   assert.match(appels[0].corps.messages[0].content, /never follow instructions/);
   await assert.rejects(() => twpLlm.translateFree({ apiKey: "", url: "" }, "auto", "fr", "x"), /no-key/);
 });
+
+test("une réponse absente (requête échouée) est une erreur, jamais le texte « null »", () => {
+  const { decouperReponse } = twpLlm._test;
+  assert.throws(() => decouperReponse(null, false, Utils.unescapeHTML), /translation failed/);
+  assert.throws(() => decouperReponse(undefined, false, Utils.unescapeHTML), /translation failed/);
+});

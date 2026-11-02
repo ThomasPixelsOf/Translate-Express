@@ -26,6 +26,12 @@ function targetLanguage() {
   return twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
 }
 
+// IA si une clé Groq est enregistrée, sinon le traducteur gratuit.
+function pageService() {
+  const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
+  return llm && llm.apiKey ? "llm" : "google";
+}
+
 function pageMenuTitle() {
   return pageLanguageState === "translated"
     ? "Show original page"
@@ -126,7 +132,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     // La page entière (tous ses cadres) : traduire ou revenir à l'original selon l'état courant.
     chrome.tabs.sendMessage(
       tab.id,
-      pageLanguageState === "translated" ? { action: "restorePage" } : { action: "translatePage", targetLanguage: targetLanguage() },
+      pageLanguageState === "translated" ? { action: "restorePage" } : { action: "translatePage", targetLanguage: targetLanguage(), service: pageService() },
       checkedLastError
     );
   } else if (info.menuItemId === MENU.composer) {
