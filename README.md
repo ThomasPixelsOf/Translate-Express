@@ -15,6 +15,81 @@ It is a fork of [TWP - Translate Web Pages](https://github.com/FilipePS/Traduzir
 - **Interface language** selectable in the settings (English, Français), following the browser by default. Adding a language is one file.
 - Dark theme everywhere.
 
+## How it fits together
+
+```mermaid
+flowchart LR
+  user(["You"])
+
+  subgraph browser["Your browser"]
+    direction TB
+    popup["Toolbar popup<br/>Translate | Settings | Dashboard"]
+    menu["Right-click menu"]
+
+    subgraph page["Every page and frame"]
+      direction TB
+      translator["Page translator<br/>visible text first"]
+      logo["Selection logo<br/>and floating panel"]
+    end
+
+    subgraph worker["Service worker"]
+      direction TB
+      router["Translation router<br/>and cache"]
+      ai["AI service<br/>token budget, priorities,<br/>answer checks"]
+      free["Free translator"]
+      log["Diagnostic log"]
+    end
+
+    storage[("Extension storage<br/>settings and API key")]
+  end
+
+  groq["Groq API"]
+  google["Google Translate"]
+
+  user --> popup
+  user --> menu
+  user --> logo
+  menu --> worker
+  popup --> worker
+  translator -->|"messages"| router
+  logo -->|"messages"| router
+  router --> ai
+  router --> free
+  ai -->|"HTTPS, your key"| groq
+  ai -.->|"saturated or failing"| free
+  free --> google
+  worker --> storage
+  router --> log
+  popup -.->|"reads"| log
+```
+
+The page scripts never see the API key: only the service worker and the extension's own pages (the popup) read it.
+
+### What happens when a page is translated
+
+```mermaid
+flowchart TD
+  start(["Translate this page"]) --> collect["Collect the text pieces<br/>including shadow DOM and changes made later"]
+  collect --> split{"On screen?"}
+  split -->|"yes"| high["High priority<br/>sent right away"]
+  split -->|"no"| low["Low priority<br/>background, closest first"]
+  high --> skip["Skip blocks already<br/>in the target language"]
+  low --> skip
+  skip --> key{"Groq key?"}
+  key -->|"no"| google["Google, block by block"]
+  key -->|"yes"| budget{"Room in the<br/>token budget?"}
+  budget -->|"waits too long"| google
+  budget -->|"yes"| batch["Batches of 1800 characters,<br/>4 at a time"]
+  batch --> check{"Pieces intact?"}
+  check -->|"no"| piece["Translate again,<br/>piece by piece"]
+  check -->|"yes"| write["Write the text into the page"]
+  piece --> write
+  batch -->|"request failed"| google
+  google --> write
+  write --> retry["Missing or failed pieces<br/>retried up to 6 times"]
+  retry --> sweep["Safety sweep every 4 s<br/>catches text nothing else saw"]
+```
+
 ## Install
 
 Works in Chrome, Brave and Edge (Manifest V3). Not in Firefox.
