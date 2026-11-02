@@ -491,12 +491,10 @@
       const root = host.attachShadow({ mode: "open" });
       root.innerHTML = `<style>
         /* The logo itself is the button: no circle around it. */
-        button { position: fixed; z-index: 2147483647; width: 28px; height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer;
-          display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)); transition: transform .1s; }
-        button:hover { transform: scale(1.12); }
-        img { width: 28px; height: 28px; display: block; }
+        button { position: fixed; z-index: 2147483647; width: 18px; height: 18px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+        img { width: 18px; height: 18px; display: block; }
         /* Fallback when the logo cannot be loaded. */
-        button.letter { border-radius: 6px; background: #4589ff; color: #fff; font: 700 14px/1 system-ui, sans-serif; }
+        button.letter { border-radius: 4px; background: #4589ff; color: #fff; font: 700 11px/1 system-ui, sans-serif; }
       </style><button title="Translate the selection" aria-label="Translate the selection"></button>`;
       const el = root.querySelector("button");
       // The extension's logo; the letter "A" if the icon cannot be loaded.
@@ -533,7 +531,7 @@
     bubble.text = text;
     bubble.info = info;
     bubble.anchor = { left: last.left, right: last.right, top: last.top, bottom: last.bottom };
-    const size = 28;
+    const size = 18;
     bubble.el.style.left = Math.max(4, Math.min(window.innerWidth - size - 4, last.right + 4)) + "px";
     bubble.el.style.top = Math.max(4, Math.min(window.innerHeight - size - 4, last.bottom + 4)) + "px";
     clearTimeout(bubble.timer);
