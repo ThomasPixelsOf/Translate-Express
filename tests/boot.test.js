@@ -108,6 +108,12 @@ test("the manifest is valid and only references files that exist", () => {
   assert.equal(m.name, "Translate Express");
   assert.match(m.version, /^1[.][0-9]+[.][0-9]+$/, "the extension's own numbering, distinct from TWP's");
   assert.equal(m.background.service_worker, "bg.js");
+  // All the page scripts are ONE group: two groups are injected at different moments and a frame (the editing area of a
+  // rich-text editor...) could get the second without the first ("twpConfig is not defined").
+  assert.equal(m.content_scripts.length, 1);
+  const js = m.content_scripts[0].js;
+  assert.ok(js.indexOf("/lib/config.js") < js.indexOf("/contentScript/showOriginal.js"), "the libraries come before the scripts that use them");
+  assert.ok(js.indexOf("/lib/ui-text.js") < js.indexOf("/contentScript/panel.js"));
   const files = [
     m.background.service_worker,
     ...Object.values(m.icons),
