@@ -112,7 +112,7 @@ test("the manifest is valid and only references files that exist", () => {
   // rich-text editor...) could get the second without the first ("twpConfig is not defined").
   assert.equal(m.content_scripts.length, 1);
   const js = m.content_scripts[0].js;
-  assert.ok(js.indexOf("/lib/config.js") < js.indexOf("/contentScript/showOriginal.js"), "the libraries come before the scripts that use them");
+  assert.ok(js.indexOf("/lib/config.js") < js.indexOf("/contentScript/pageTranslator.js"), "the libraries come before the scripts that use them");
   assert.ok(js.indexOf("/lib/ui-text.js") < js.indexOf("/contentScript/panel.js"));
   const files = [
     m.background.service_worker,

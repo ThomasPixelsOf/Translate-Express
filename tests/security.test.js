@@ -79,7 +79,7 @@ test("the diagnostic log masks anything that looks like a key", () => {
 });
 
 test("no script injected in a web page asks for the key", () => {
-  for (const f of ["contentScript/pageTranslator.js", "contentScript/panel.js", "contentScript/showOriginal.js"]) {
+  for (const f of ["contentScript/pageTranslator.js", "contentScript/panel.js"]) {
     assert.ok(!/customServices|apiKey/.test(fs.readFileSync(path.join(SRC, f), "latin1")), f + " must not touch the key");
   }
 });

@@ -17,7 +17,7 @@
   "permissions": ["storage", "contextMenus", "alarms"],
   "web_accessible_resources": [
     {
-      "resources": ["/contentScript/css/*", "/icons/*"],
+      "resources": ["/icons/*"],
       "matches": ["<all_urls>"]
     }
   ],
@@ -36,7 +36,6 @@
         "/lib/ui-text.js",
         "/lib/ui/en.js",
         "/lib/ui/fr.js",
-        "/contentScript/showOriginal.js",
         "/contentScript/pageTranslator.js",
         "/contentScript/panel.js"
       ]

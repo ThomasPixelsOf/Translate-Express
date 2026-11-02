@@ -1097,20 +1097,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     return attributesToTranslate;
   }
 
-  // encapsulating the text makes the video disappear
-  // when using a function like Parent.removeChild(child)
-  // an error may be generated when encapsulating
-  function encapsulateTextNode(node) {
-    const fontNode = document.createElement("font");
-    fontNode.setAttribute("style", "vertical-align: inherit;");
-    fontNode.textContent = node.textContent;
-
-    node.replaceWith(fontNode);
-    markSeen(fontNode); // the text it contains is already handled: do not send it again as "new"
-
-    return fontNode;
-  }
-
   function translateTextContent(node, parentNode, text, toRestore) {
     toRestore.translatedText = text;
 
@@ -1213,11 +1199,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
             const originalTextNode = nodes[j];
             const parentNode = nodes[j].parentNode;
-            if (showOriginal.isEnabled) {
-              nodes[j] = encapsulateTextNode(nodes[j]);
-              showOriginal.add(nodes[j]);
-            }
-
             const toRestore = {
               node: nodes[j],
               original: originalTextNode,
@@ -1254,11 +1235,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
             const originalTextNode = nodes[j];
             const parentNode = nodes[j].parentNode;
-            if (showOriginal.isEnabled) {
-              nodes[j] = encapsulateTextNode(nodes[j]);
-              showOriginal.add(nodes[j]);
-            }
-
             const toRestore = {
               node: nodes[j],
               original: originalTextNode,
@@ -1540,7 +1516,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   pageTranslator.translatePage = function (targetLanguage) {
     fooCount++;
     pageTranslator.restorePage();
-    showOriginal.enable();
     chrome.runtime.sendMessage(
       { action: "removeTranslationsWithError" },
       checkedLastError
@@ -1604,7 +1579,6 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     fooCount++;
     piecesToTranslate = [];
 
-    showOriginal.disable();
     disableMutatinObserver();
 
     pageLanguageState = "original";
@@ -1905,10 +1879,4 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       }
     );
   }
-
-  showOriginal.enabledObserverSubscribe(function () {
-    if (pageLanguageState !== "original") {
-      pageTranslator.translatePage();
-    }
-  });
 });

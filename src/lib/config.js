@@ -10,7 +10,7 @@ const twpConfig = (function () {
   const inWebPage = typeof location !== "undefined" && /^(https?|file|ftp):$/.test(location.protocol);
   /**
    * all configName available
-   * @typedef {"uiLanguage" | "pageTranslatorService" | "enabledServices" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageFixed" | "writeLanguage" | "diagnostics" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "alwaysTranslateLangs" | "neverTranslateLangs" | "customDictionary" | "showOriginalTextWhenHovering" | "showTranslateSelectedButton" | "darkMode" | "translateTag_pre" | "enableIframePageTranslation" | "dontSortResults" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "enableDiskCache" | "useAlternativeService" | "customServices" | "proxyServers"} DefaultConfigNames
+   * @typedef {"uiLanguage" | "pageTranslatorService" | "enabledServices" | "targetLanguage" | "targetLanguageChosen" | "targetLanguageFixed" | "writeLanguage" | "diagnostics" | "targetLanguages" | "alwaysTranslateSites" | "neverTranslateSites" | "alwaysTranslateLangs" | "neverTranslateLangs" | "customDictionary" | "showTranslateSelectedButton" | "translateTag_pre" | "enableIframePageTranslation" | "dontSortResults" | "translateDynamicallyCreatedContent" | "autoTranslateWhenClickingALink" | "enableDiskCache" | "useAlternativeService" | "customServices" | "proxyServers"} DefaultConfigNames
    */
   const defaultConfig = {
     uiLanguage: "default",
@@ -29,9 +29,7 @@ const twpConfig = (function () {
     alwaysTranslateLangs: [],
     neverTranslateLangs: [],
     customDictionary: new Map(),
-    showOriginalTextWhenHovering: "no",
     showTranslateSelectedButton: "yes",
-    darkMode: "auto", // auto yes no
     translateTag_pre: "yes",
     enableIframePageTranslation: "yes",
     dontSortResults: "no",

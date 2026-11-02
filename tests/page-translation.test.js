@@ -78,8 +78,7 @@ function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } =
   w.platformInfo = { isMobile: { any: false }, isDesktop: { any: true }, isFirefox: false };
   w.checkedLastError = () => {};
   w.fetch = async () => ({ ok: true, text: async () => "" });
-  // Both scripts in the same block: the second uses the `showOriginal` constant defined by the first.
-  w.eval([read("contentScript/showOriginal.js"), read("contentScript/pageTranslator.js")].join(String.fromCharCode(10)));
+  w.eval(read("contentScript/pageTranslator.js"));
   const send = (m) => listeners.forEach((f) => f(m, {}, () => {}));
   const text = (id) => w.document.getElementById(id).textContent;
   return { w, requests, priorities, send, text };
