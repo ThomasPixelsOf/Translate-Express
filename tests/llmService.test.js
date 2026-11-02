@@ -15,9 +15,11 @@ const Utils = {
   escapeHTML: (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
   unescapeHTML: (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
 };
+twpLlm._test.configurerBudget({ limite: 1e9 });
 const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "un-modele/test-1" };
 
 function fauxFetch(reponses) {
+  twpLlm._test.reinitialiserBudget(); // un blocage ou des dépenses d'un test précédent ne doivent pas gêner celui-ci
   const appels = [];
   global.fetch = async (url, init) => {
     appels.push({ url, init, corps: init && init.body ? JSON.parse(init.body) : null });
@@ -175,4 +177,93 @@ test("limite de débit longue : abandon immédiat (pas d'attente de plusieurs di
 test("lots plus petits (1800 caractères) pour pouvoir partir en parallèle", () => {
   const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m" });
   assert.equal(service.maxRequestSize, 1800);
+});
+
+test("structure : si le modèle fusionne deux morceaux d'un bloc, le bloc est retraduit morceau par morceau (aucun morceau perdu)", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-structure" });
+  const bloc = "<pre><a i=0>One</a><a i=1>Two</a><a i=2>Three</a></pre>";
+  const appels = fauxFetch([
+    { content: JSON.stringify({ translations: ["<pre><a i=0>Un</a><a i=1>Deux Trois</a></pre>"] }) }, // 2 morceaux au lieu de 3
+    { content: JSON.stringify({ translations: ["<pre>Un</pre>", "<pre>Deux</pre>", "<pre>Trois</pre>"] }) }, // retraduit un par un
+  ]);
+  const rep = await service.makeRequest("en", "fr", [{ originalText: bloc }]);
+  assert.equal(appels.length, 2);
+  assert.deepEqual(JSON.parse(appels[1].corps.messages[1].content), ["<pre>One</pre>", "<pre>Two</pre>", "<pre>Three</pre>"]);
+  assert.deepEqual(service.cbTransformResponse(rep[0], false), ["Un", "Deux", "Trois"]);
+});
+
+test("structure : numéros de morceaux non consécutifs ou balises perdues = bloc invalide ; un bloc correct n'est pas retraduit", () => {
+  const { structureValide, extrairePieces } = twpLlm._test;
+  const source = "<pre><a i=0>A</a><a i=1>B</a></pre>";
+  assert.equal(structureValide(source, "<pre><a i=0>a</a><a i=1>b</a></pre>"), true);
+  assert.equal(structureValide(source, "<pre><a i=0>a</a><a i=2>b</a></pre>"), false, "numéros 0 et 2");
+  assert.equal(structureValide(source, "<pre>a b</pre>"), false, "balises perdues");
+  assert.equal(structureValide("<pre>Un seul morceau</pre>", "<pre>Un seul</pre>"), true, "bloc simple : rien à contrôler");
+  assert.deepEqual(extrairePieces(source), ["A", "B"]);
+});
+
+test("budget de jetons : les requêtes qui dépasseraient la minute attendent au lieu d'être refusées (aucune erreur 429)", async () => {
+  twpLlm._test.configurerBudget({ fenetreMs: 600, limite: 700 });
+  try {
+    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-budget" });
+    const texte = "<pre>" + "mot ".repeat(150) + "</pre>"; // ~ 600 caractères : plus de 500 jetons estimés, deux requêtes ne tiennent pas dans 700
+    const cout = twpLlm._test.estimerJetons([{ content: "x".repeat(150) }, { content: JSON.stringify([texte]) }], "m-budget");
+    assert.ok(cout > 350 && cout < 700, "estimation plausible : " + cout);
+    const appels = fauxFetch([1, 2, 3].map(() => ({ content: '{"translations":["ok"]}' })));
+    const t0 = Date.now();
+    await Promise.all([1, 2, 3].map(() => service.makeRequest("en", "fr", [{ originalText: texte }])));
+    assert.equal(appels.length, 3, "toutes les requêtes ont fini par partir");
+    assert.ok(Date.now() - t0 >= 1000, "elles ont été étalées sur la fenêtre (pas envoyées d'un coup) : " + (Date.now() - t0) + " ms");
+  } finally {
+    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+  }
+});
+
+test("budget de jetons : la limite réelle annoncée par le fournisseur est lue dans les en-têtes", async () => {
+  twpLlm._test.configurerBudget({ limite: 6000 });
+  try {
+    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-entetes" });
+    global.fetch = async (url, init) => ({
+      ok: true, status: 200,
+      headers: { get: (n) => (n === "x-ratelimit-limit-tokens" ? "12000" : null) },
+      json: async () => ({ choices: [{ message: { content: '{"translations":["ok"]}' } }], usage: { total_tokens: 321 } }),
+    });
+    await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
+    assert.equal(twpLlm._test.budget.limite, 10200, "85 % de 12 000 jetons par minute");
+    assert.equal(twpLlm._test.budget.depenses.at(-1).jetons, 321, "la consommation réelle remplace l'estimation");
+  } finally {
+    twpLlm._test.configurerBudget({ limite: 1e9 });
+  }
+});
+
+test("erreur 429 de quelques secondes : l'extension attend puis réussit, sans abandonner ni se replier sur Google", async () => {
+  twpLlm._test.configurerBudget({ limite: 1e9 });
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-429" });
+  const appels = fauxFetch([{ status: 429, retryAfter: "1" }, { content: '{"translations":["fini"]}' }]);
+  const t0 = Date.now();
+  const rep = await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
+  assert.deepEqual(rep, ["fini"]);
+  assert.equal(appels.length, 2);
+  assert.ok(Date.now() - t0 >= 900, "elle a attendu le délai indiqué (1 s)");
+  twpLlm._test.configurerBudget({ limite: 1e9 });
+});
+
+test("la consigne envoyée à chaque requête est courte (moins de jetons gaspillés)", async () => {
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-court" });
+  const appels = fauxFetch([{ content: '{"translations":["ok"]}' }]);
+  await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
+  assert.ok(appels[0].corps.messages[0].content.length < 520, "consigne : " + appels[0].corps.messages[0].content.length + " caractères");
+  assert.match(appels[0].corps.messages[0].content, /already in French/);
+});
+
+test("limite longue (quota du jour) : les requêtes suivantes échouent tout de suite au lieu d'attendre toutes plusieurs dizaines de secondes", async () => {
+  twpLlm._test.configurerBudget({ limite: 1e9 });
+  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-quota" });
+  const appels = fauxFetch([{ status: 429, retryAfter: "600" }]);
+  await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>a</pre>" }]), /rate limited/);
+  const t0 = Date.now();
+  await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>b</pre>" }]), /rate limited/);
+  assert.ok(Date.now() - t0 < 300, "échec immédiat");
+  assert.equal(appels.length, 1, "aucune requête envoyée pendant le blocage");
+  twpLlm._test.configurerBudget({ limite: 1e9 });
 });

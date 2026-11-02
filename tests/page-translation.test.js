@@ -14,7 +14,7 @@ const lire = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
 const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Une page de 6 paragraphes positionnés par data-top / data-bottom (jsdom ne fait pas de mise en page).
-function creerPage({ echecsAvantSucces = 0 } = {}) {
+function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = {}) {
   const lignes = [
     ["p1", 20, 60], ["p2", 80, 120], ["p3", 140, 180], // à l'écran (hauteur 600)
     ["p4", 700, 740],                                   // juste sous l'écran, dans la marge de prélecture
@@ -34,6 +34,7 @@ function creerPage({ echecsAvantSucces = 0 } = {}) {
 
   const demandes = []; // une entrée par appel « translateHTML »
   let echecsRestants = echecsAvantSucces;
+  let tronquer = tronquerPremiereReponse;
   const ecouteurs = [];
   w.chrome = {
     runtime: {
@@ -47,6 +48,11 @@ function creerPage({ echecsAvantSucces = 0 } = {}) {
         if (m.action === "translateHTML") {
           demandes.push(m.sourceArray2d.map((b) => b.join(" ")));
           if (echecsRestants > 0) { echecsRestants--; return repondre(undefined); } // le moteur échoue
+          if (tronquer && m.sourceArray2d.some((b) => b.length > 1)) {
+            // Le moteur ne renvoie que le premier morceau de chaque bloc : les suivants restent à traduire.
+            tronquer = false;
+            return repondre(m.sourceArray2d.map((b) => b.map((s, k) => (k === 0 ? "[fr] " + s : undefined)).filter((x) => x !== undefined)));
+          }
           return repondre(m.sourceArray2d.map((b) => b.map((s) => "[fr] " + s)));
         }
         if (m.action === "detectTabLanguage" || m.action === "getMainFrameTabLanguage") return repondre("en");
@@ -223,5 +229,21 @@ test("pas de boucle : un texte déjà traduit n'est pas renvoyé au traducteur �
     await attendre(9000); // deux balayages et plusieurs relectures
     assert.equal(page.demandes.length, avant, "aucune nouvelle demande : le texte déjà traduit n'est pas retraduit");
     assert.doesNotMatch(page.texte("p1"), /\[fr\] \[fr\]/, "pas de double traduction");
+  } finally { page.w.close(); }
+});
+
+test("réponse tronquée : les morceaux d'un même bloc restés sans traduction sont réessayés (début traduit, fin non)", { skip: ignorer, timeout: 30000 }, async () => {
+  const page = creerPage({ tronquerPremiereReponse: true });
+  try {
+    page.w.document.body.insertAdjacentHTML("beforeend", '<p id="mix" data-top="300" data-bottom="340">First sentence here <b>bold part</b> and the final words.</p>');
+    await attendre(150);
+    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await attendre(900);
+    const apres1 = page.texte("mix");
+    assert.match(apres1, /\[fr\] First sentence/, "le début est traduit");
+    assert.doesNotMatch(apres1, /\[fr\]\s+and the final words/, "la fin n'est pas encore traduite (réponse tronquée)");
+    await attendre(4500); // réessai des morceaux manquants
+    assert.match(page.texte("mix"), /\[fr\] bold part/, "morceau du milieu traduit après le réessai");
+    assert.match(page.texte("mix"), /\[fr\]\s+and the final words/, "la fin est traduite après le réessai");
   } finally { page.w.close(); }
 });

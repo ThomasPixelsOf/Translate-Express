@@ -76,8 +76,52 @@ var twpLlm = (function () {
   const MAX_CONCURRENT = 4; // requêtes simultanées vers le fournisseur
   const MAX_RETRIES = 3; // nouvelles tentatives sur 429 / 5xx
   const TIMEOUT_MS = 20000; // une réponse normale arrive en 1 à 3 s : au-delà, on réessaie plutôt que d'attendre
-  const MAX_WAIT_MS = 6000; // limite de débit annoncée plus longue que cela : on abandonne tout de suite (repli sur Google)
+  const MAX_WAIT_MS = 40000; // limite de débit annoncée plus longue (quota du jour par exemple) : on abandonne (repli sur Google)
   const BATCH_CHARS = 1800; // taille d'un lot : assez petit pour que plusieurs lots partent en parallèle ; Google reste à 800
+
+  // Budget de jetons par minute. L'offre gratuite de Groq limite les jetons par minute (environ 6 000 à 12 000 selon le modèle) :
+  // une page traduite d'un coup dépasse la limite, les requêtes sont refusées (429) et la page reste à moitié traduite.
+  // On compte donc ce que chaque requête coûte et on l'envoie seulement quand la minute glissante a la place : la page
+  // se traduit par vagues, sans erreur. La limite réelle est relue dans les en-têtes des réponses du fournisseur.
+  const budget = { fenetreMs: 60000, limite: 6000, depenses: [], bloqueJusqua: 0 };
+
+  function jetonsUtilises(maintenant) {
+    budget.depenses = budget.depenses.filter((d) => maintenant - d.t < budget.fenetreMs);
+    return budget.depenses.reduce((somme, d) => somme + d.jetons, 0);
+  }
+
+  // Estimation : ~3 caractères par jeton en entrée ; en sortie la traduction, un peu plus longue, + la réflexion des modèles raisonneurs.
+  function estimerJetons(messages, modele) {
+    const entree = messages.reduce((s, m) => s + m.content.length, 0) / 3;
+    const texte = messages[messages.length - 1].content.length / 3;
+    return Math.ceil(entree + texte * 1.3 + (/gpt-oss|qwen/i.test(modele) ? 250 : 40));
+  }
+
+  async function reserver(jetons) {
+    for (;;) {
+      const maintenant = Date.now();
+      if (maintenant < budget.bloqueJusqua) {
+        // Limite longue (quota du jour) : inutile de faire patienter chaque requête, on échoue tout de suite
+        // et le service appelant se replie sur le traducteur gratuit.
+        if (budget.bloqueJusqua - maintenant > MAX_WAIT_MS) {
+          const err = new Error("rate limited (retry in " + Math.round((budget.bloqueJusqua - maintenant) / 1000) + " s)");
+          err.definitive = true;
+          throw err;
+        }
+        await attendre(Math.min(budget.bloqueJusqua - maintenant, 2000));
+        continue;
+      }
+      const deja = jetonsUtilises(maintenant);
+      // Une requête plus grosse que toute la limite part quand même, seule.
+      if (deja === 0 || deja + jetons <= budget.limite) {
+        const entree = { t: maintenant, jetons };
+        budget.depenses.push(entree);
+        return entree;
+      }
+      const plusAncienne = budget.depenses[0];
+      await attendre(Math.max(50, Math.min(plusAncienne.t + budget.fenetreMs - maintenant + 20, 2000)));
+    }
+  }
 
   // Réglages qui coupent la « réflexion » des modèles raisonneurs (réponse bien plus rapide). Si le fournisseur les refuse
   // (erreur 400), on réessaie sans, et on s'en souvient.
@@ -138,12 +182,13 @@ var twpLlm = (function () {
   async function appeler(cfg, messages) {
     let derniereErreur = null;
     for (let essai = 0; essai <= MAX_RETRIES; essai++) {
+      const modele = await modeleAuto(cfg);
+      const depense = await reserver(estimerJetons(messages, modele));
       await creneau();
       const ctrl = new AbortController();
       const minuterie = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       let attente = 0;
       try {
-        const modele = await modeleAuto(cfg);
         const res = await fetch(cfg.url, {
           method: "POST",
           signal: ctrl.signal,
@@ -159,10 +204,16 @@ var twpLlm = (function () {
             ...(cfg._sansReglagesRapides ? {} : reglagesRapides(modele)),
           }),
         });
+        // La limite réelle du fournisseur remplace la valeur prudente par défaut.
+        const limiteJetons = Number(res.headers.get("x-ratelimit-limit-tokens"));
+        if (limiteJetons > 0) budget.limite = Math.floor(limiteJetons * 0.85);
+
         if (res.status === 429 || res.status >= 500) {
           const retryAfter = Number(res.headers.get("retry-after"));
           attente = (retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** essai) + Math.random() * 300;
           derniereErreur = new Error("HTTP " + res.status);
+          // Limite atteinte : plus aucune requête ne part avant la fin du délai indiqué.
+          if (res.status === 429) budget.bloqueJusqua = Math.max(budget.bloqueJusqua, Date.now() + attente);
           if (res.status === 429 && attente > MAX_WAIT_MS) {
             // Limite de débit longue : attendre bloquerait la page des dizaines de secondes. On abandonne tout de suite,
             // le service appelant se replie sur le traducteur gratuit.
@@ -187,6 +238,7 @@ var twpLlm = (function () {
           const data = await res.json();
           const contenu = data?.choices?.[0]?.message?.content;
           if (typeof contenu !== "string") throw new Error("réponse sans contenu");
+          if (data?.usage?.total_tokens > 0) depense.jetons = data.usage.total_tokens; // consommation réelle
           return contenu;
         }
       } catch (e) {
@@ -204,14 +256,30 @@ var twpLlm = (function () {
 
   function consigne(src, tgt) {
     return (
-      "You are a professional translator. Translate each string of the JSON array provided by the user from " +
-      nomLangue(src) +
-      " to " +
-      nomLangue(tgt) +
-      ". Rules: keep every HTML tag and attribute exactly as is (for example <pre>, <a i=0>, </a>, <b>); translate only the human-readable text between tags; " +
-      "if a string is already written in the target language, return it exactly as it is; do not translate code, URLs, e-mail addresses, numbers or product and brand names; keep the same meaning, tone and punctuation. " +
-      'Reply with ONLY a JSON object of the form {"translations": ["...", "..."]} containing exactly as many strings as the input array, in the same order. No explanation.'
+      "Translate each string of the JSON array from " + nomLangue(src) + " to " + nomLangue(tgt) + ". " +
+      "Keep HTML tags exactly as they are (<a i=0>…</a>, <b>…</b>) and translate only the text between them. " +
+      "Leave unchanged: code, URLs, e-mail addresses, numbers, brand names, and any string already in " + nomLangue(tgt) + ". " +
+      'Reply with ONLY {"translations": ["...", ...]} holding exactly as many strings, in the same order.'
     );
+  }
+
+  // Un bloc de plusieurs morceaux est envoyé sous la forme <pre><a i=0>…</a><a i=1>…</a></pre>. Si le modèle fusionne deux
+  // morceaux, en oublie un ou change les numéros, les morceaux suivants se décalent ou restent en version originale
+  // (« le début du message est traduit, la fin reste en anglais »). On vérifie donc chaque bloc.
+  function structureValide(source, sortie) {
+    const attendus = (String(source).match(/<a i=\d+>/gi) || []).length;
+    if (attendus === 0) return true; // bloc d'un seul morceau : pas de balises à contrôler
+    const indices = Array.from(String(sortie).matchAll(/<a i=(\d+)>/gi), (m) => Number(m[1])).sort((a, b) => a - b);
+    return indices.length === attendus && indices.every((valeur, rang) => valeur === rang);
+  }
+
+  // Texte (déjà échappé) de chaque morceau d'un bloc envoyé.
+  function extrairePieces(source) {
+    const pieces = [];
+    const re = /<a i=(\d+)>([\s\S]*?)<\/a>/gi;
+    let m;
+    while ((m = re.exec(String(source))) !== null) pieces[Number(m[1])] = m[2];
+    return Array.from(pieces, (p) => p ?? "");
   }
 
   async function traduireLot(cfg, src, tgt, textes) {
@@ -221,7 +289,18 @@ var twpLlm = (function () {
     ];
     try {
       const tab = extraireTableau(await appeler(cfg, messages));
-      if (tab.length === textes.length) return tab;
+      if (tab.length === textes.length) {
+        // Les blocs dont les morceaux ont été fusionnés ou perdus sont retraduits morceau par morceau.
+        const aCorriger = tab.map((sortie, i) => (structureValide(textes[i], sortie) ? -1 : i)).filter((i) => i >= 0);
+        await Promise.all(
+          aCorriger.map(async (i) => {
+            const pieces = extrairePieces(textes[i]);
+            const traduites = await traduireLot(cfg, src, tgt, pieces.map((p) => "<pre>" + p + "</pre>"));
+            tab[i] = "<pre>" + traduites.map((x, k) => "<a i=" + k + ">" + String(x).replace(/^<pre>|<\/pre>$/g, "") + "</a>").join("") + "</pre>";
+          }),
+        );
+        return tab;
+      }
     } catch (e) {
       if (e.definitive) throw e;
     }
@@ -348,7 +427,12 @@ var twpLlm = (function () {
       .sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  return { create, tester, translateFree: traduireTexteLibre, listModels: listerModeles, normaliser, detecterFournisseur, PROVIDERS, _test: { extraireTableau, decouperReponse, retirerReflexion } };
+  return { create, tester, translateFree: traduireTexteLibre, listModels: listerModeles, normaliser, detecterFournisseur, PROVIDERS, _test: {
+      reinitialiserBudget: () => { budget.depenses = []; budget.bloqueJusqua = 0; },
+      configurerBudget: (o) => { Object.assign(budget, o); budget.depenses = []; budget.bloqueJusqua = 0; },
+      budget,
+      estimerJetons,
+      extraireTableau, decouperReponse, retirerReflexion, structureValide, extrairePieces } };
 })();
 
 if (typeof module !== "undefined") module.exports = twpLlm;

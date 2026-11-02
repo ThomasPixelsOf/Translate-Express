@@ -21,6 +21,14 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 
 Zéro réglage : langue cible par défaut = le français, puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
 
+## Limites de Groq : budget de jetons par minute
+
+L'offre gratuite limite les jetons par minute (environ 8 000 pour gpt-oss-20b, plus pour d'autres modèles) et les requêtes par minute (30). Une page traduite d'un coup dépasse la limite : les requêtes sont refusées (erreur 429) et la page reste à moitié traduite. L'extension compte donc ce que chaque requête coûte (estimation, corrigée par la consommation réelle renvoyée par Groq), ne l'envoie que si la minute glissante a la place, et lit la limite réelle dans les en-têtes de réponse (85 % de la valeur annoncée ; 6 000 par prudence avant la première réponse). La page se traduit donc par vagues, sans erreur. Sur une erreur 429 de quelques secondes, l'extension attend le délai indiqué ; au-delà de 40 s (quota du jour), elle abandonne tout de suite et la page est traduite par Google. La consigne envoyée à chaque requête est courte, pour ne pas gaspiller de jetons.
+
+## Structure des blocs : début traduit, fin en anglais
+
+Un bloc de plusieurs morceaux est envoyé sous la forme `<a i=0>…</a><a i=1>…</a>`. Avant, seul le nombre de blocs était vérifié : si le modèle fusionnait ou oubliait un morceau, les suivants se décalaient ou restaient en anglais sans erreur. Maintenant chaque bloc est vérifié (nombre de morceaux et numéros 0 à n-1) et retraduit morceau par morceau s'il est faux ; côté page, les morceaux restés sans traduction dans un bloc répondu sont réessayés (jusqu'à 6 fois).
+
 ## Vitesse
 
 TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté IA : le modèle choisi automatiquement est un modèle rapide qui ne « réfléchit » pas avant de répondre (ordre de préférence : llama-3.3-70b-versatile, gpt-oss-20b, llama-3.1-8b-instant, puis les modèles raisonneurs) ; les modèles raisonneurs reçoivent le réglage qui coupe la réflexion (retiré tout seul si le fournisseur le refuse) ; lots de 1800 caractères traduits 4 par 4 en parallèle ; une réponse qui dépasse 20 s est réessayée ; une limite de débit annoncée à plus de 6 s fait abandonner tout de suite l'IA, et la page est traduite par Google au lieu d'attendre ; un lot dont la longueur ne correspond pas est coupé en deux moitiés traduites en parallèle. Le menu « Model » de la page de réglage permet de choisir un autre modèle.

@@ -450,7 +450,9 @@ const traduire = (handlers, blocs) => envoyer(handlers, { action: "translateHTML
 
 test("résilience : un échec de l'IA n'est pas mémorisé, la nouvelle tentative du même texte réussit", async () => {
   let appels = 0;
-  const { handlers } = await demarrerAvecIa(() => (++appels === 1 ? limite() : reponseIa(["<pre>Bonjour le monde</pre>"])));
+  // Premier essai : clé refusée (échec immédiat, sans délai d'attente) ; second essai : l'IA répond.
+  const refusCle = () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ error: { message: "Invalid API Key" } }) });
+  const { handlers } = await demarrerAvecIa(() => (++appels === 1 ? refusCle() : reponseIa(["<pre>Bonjour le monde</pre>"])));
   const premier = await traduire(handlers, [["Hello world"]]);
   assert.ok(premier === "REPONSE VIDE" || (Array.isArray(premier) && premier[0].length === 0), "premier essai : échec (IA limitée, Google coupé)");
   const second = await traduire(handlers, [["Hello world"]]);

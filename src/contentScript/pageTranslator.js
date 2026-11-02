@@ -943,6 +943,28 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     });
   }
 
+  // Le moteur peut répondre pour une partie seulement des nœuds d'un morceau (réponse tronquée, balises perdues) : les nœuds
+  // restés sans traduction forment un nouveau morceau, réessayé après un court délai.
+  function retryNodesWithoutTranslation(piecesToTranslateNow, results) {
+    if (!Array.isArray(results)) return;
+    piecesToTranslateNow.forEach((ptt, i) => {
+      const r = results[i];
+      if (!Array.isArray(r) || !r.some((x) => typeof x === "string" && x.length > 0)) return; // échec total : déjà géré
+      const missing = ptt.nodes.filter((_, j) => !(typeof r[j] === "string" && r[j].length > 0));
+      const tries = ptt.partialRetries || 0;
+      if (missing.length === 0 || tries >= MAX_PIECE_RETRIES) return;
+      piecesToTranslate.push({
+        isTranslated: false,
+        parentElement: ptt.parentElement,
+        topElement: ptt.topElement,
+        bottomElement: ptt.bottomElement,
+        nodes: missing,
+        partialRetries: tries + 1,
+        retryAt: Date.now() + 1500 * (tries + 1),
+      });
+    });
+  }
+
   function translateResults(piecesToTranslateNow, results) {
     if (!Array.isArray(results)) return;
     results = results.map((r) => (Array.isArray(r) ? r : [])); // morceau sans réponse : ignoré, réessayé plus tard
@@ -1151,6 +1173,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
                 currentFooCount === fooCount
               ) {
                 scheduleRetryOfFailedPieces(piecesToTranslateNow, results);
+                retryNodesWithoutTranslation(piecesToTranslateNow, results);
                 translateResults(piecesToTranslateNow, results);
               }
             });
