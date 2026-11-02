@@ -113,7 +113,7 @@ Popup, options page, shortcuts, floating button, translation on hover, text to s
 | `src/composer/` | the message window |
 | `src/setup/` | the "Groq key..." page |
 | `src/lib/` | configuration, languages, original utilities |
-| `tests/` | tests without network: `node --test tests/` |
+| `tests/` | tests without network: `node --test "tests/*.test.js"` |
 
 ## Usage
 
@@ -135,7 +135,7 @@ Our history does not contain the original project's (only its 10.2.5.0 state in 
 git remote add upstream https://github.com/FilipePS/Traduzir-paginas-web.git
 git fetch upstream chrome-mv3
 git diff <first-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js src/contentScript/showOriginal.js
-node --test tests/
+node --test "tests/*.test.js"
 ```
 
 `<first-commit>` is the very first commit of this repository (`git rev-list --max-parents=0 HEAD`). The diff shows what changed in the original project since our base; what touches `pageTranslator.js`, `showOriginal.js` and Google's translation logic is taken by hand, keeping our version of the rest (many files were removed or rewritten: `translationService.js`, `languages.js`, `config.js`, `manifest.json`).

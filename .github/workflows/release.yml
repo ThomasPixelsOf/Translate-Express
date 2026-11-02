@@ -23,8 +23,12 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Run tests
-        run: node --test tests/
+        run: node --test "tests/*.test.js"
 
       - name: Build the zip
         run: (cd src && zip -r -q "../translate-express-$GITHUB_REF_NAME.zip" .)

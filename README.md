@@ -25,7 +25,7 @@ While developing, the extension reloads itself within about 30 seconds of a file
 ## Tests
 
 ```
-node --test tests/
+node --test "tests/*.test.js"
 ```
 
 The page and panel tests use [jsdom](https://github.com/jsdom/jsdom); install it first (`npm install jsdom`) or those tests are skipped.
