@@ -551,7 +551,7 @@ const translationService = (function () {
               const results = this.cbParseResponse(response);
               for (const idx in request) {
                 const result = results[idx];
-                this.cbTransformResponse(result.text, dontSortResults); // apenas para gerar error
+                this.cbTransformResponse(result.text, dontSortResults); // only to generate an error
                 const transInfo = request[idx];
                 transInfo.detectedLanguage = result.detectedLanguage || "und";
                 transInfo.translatedText = result.text;
@@ -586,7 +586,7 @@ const translationService = (function () {
           (transInfo) => transInfo.waitTranlate,
         ),
       );
-      // Une requête en échec ne doit pas faire perdre les autres : son bloc est rendu vide ([]), la page le réessaiera.
+      // A failed request must not make the others lost: its block is returned empty ([]), the page will retry it.
       return currentTranslationsInProgress.map((transInfo) => {
         try {
           return this.cbTransformResponse(transInfo.translatedText, dontSortResults);
@@ -875,7 +875,7 @@ const translationService = (function () {
     }
   })();
 
-  // LLM : service par modèle de langage (Groq), voir llmService.js
+  // LLM: language-model service (Groq), see llmService.js
   const createLlmService = (cfg) => twpLlm.create(Service, Utils, cfg);
 
   /** @type {Map<string, Service>} */
@@ -915,17 +915,17 @@ const translationService = (function () {
       true,
     );
     const service = getSafeServiceByName(serviceName);
-    // Les échecs précédents ne doivent pas rester en mémoire : sinon la nouvelle tentative du même texte échoue aussitôt.
+    // Previous failures must not stay in memory: otherwise retrying the same text fails right away.
     serviceList.forEach((s) => s.removeTranslationsWithError && s.removeTranslationsWithError());
 
     const tDebut = Date.now();
     const stats = { sent: 0, failed: 0, fallbackOk: 0 };
     const translateWith = async (svc, blocks) => {
       const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults, { priority });
-      return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // un service sans réponse = blocs vides
+      return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // a service without an answer = empty blocks
     };
 
-    // Pages en plusieurs langues : les blocs déjà dans la langue cible ne sont pas retraduits (voir skipTargetLanguage.js).
+    // Multilingual pages: blocks already in the target language are not translated again (see skipTargetLanguage.js).
     const resultat = await twpSkip.translateSkippingTarget(
       sourceArray2d,
       targetLanguage,
@@ -933,7 +933,7 @@ const translationService = (function () {
         stats.sent = blocks.length;
         const results = await translateWith(service, blocks);
         if (serviceName === "llm") {
-          // Les blocs que l'IA n'a pas pu traduire sont confiés à Google, bloc par bloc (le reste n'est pas refait).
+          // Blocks the AI could not translate are handed to Google, block by block (the rest is not redone).
           const failed = results.map((r, i) => (r.length === 0 && blocks[i].length > 0 ? i : -1)).filter((i) => i >= 0);
           stats.failed = failed.length;
           if (failed.length > 0) {
@@ -1037,7 +1037,7 @@ const translationService = (function () {
           request.dontSortResults,
           request.priority,
         )
-        // Repli : si l'IA échoue (clé refusée, limite de débit, panne), la page est traduite par Google plutôt que de rester vide.
+        // Fallback: if the AI fails (key refused, rate limit, outage), the page is translated by Google rather than left empty.
         .catch((e) => {
           if (request.translationService !== "llm") throw e;
           console.warn("AI translation failed, falling back to the free translator:", e);

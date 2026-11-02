@@ -1,4 +1,4 @@
-// Seul réglage de l'extension : la clé Groq. Fournisseur reconnu à la clé, modèle automatique (menu facultatif).
+// The extension's only setting: the Groq key. Provider recognized from the key, automatic model (optional menu).
 (function () {
   "use strict";
   const $ = (s) => document.querySelector(s);
@@ -65,7 +65,7 @@
     setStatus("Key removed: the free translator is used again.");
   }
 
-  // Langue cible : une seule pour toute l'extension, enregistrée dès qu'on la change.
+  // Target language: a single one for the whole extension, saved as soon as it is changed.
   function initLanguage() {
     const select = $("#language");
     const names = twpLang.getLanguageList();
@@ -76,7 +76,7 @@
       twpConfig.set("targetLanguage", select.value);
       setStatus("Reading language saved: " + names[select.value]);
     };
-    // Langue d'écriture : celle dans laquelle le texte tapé est traduit pour le destinataire.
+    // Writing language: the one the typed text is translated into for the recipient.
     const write = $("#writeLanguage");
     twpLang.fillLanguageSelect(write);
     write.value = twpConfig.get("writeLanguage") || "en";
@@ -86,7 +86,7 @@
     };
   }
 
-  // Dans le volet de la page : lien de retour vers la fenêtre de message et signal « prêt ».
+  // In the page's panel: link back to the message window and "ready" signal.
   if (new URLSearchParams(location.search).get("dock") === "1") {
     $("#back").hidden = false;
     $("#back a").onclick = (e) => {

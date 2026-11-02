@@ -1,6 +1,6 @@
 "use strict";
 
-// Tableau de bord (fenêtre popup) : résumé, état de la page choisie, journal. Les calculs sont dans metrics.js.
+// Dashboard (popup window): summary, state of the chosen page, log. The calculations are in metrics.js.
 const $ = (id) => document.getElementById(id);
 const tabId = Number(new URLSearchParams(location.search).get("tab")) || null;
 let events = [];

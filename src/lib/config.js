@@ -16,13 +16,13 @@ const twpConfig = (function () {
     enabledServices: ["google"],
     ttsSpeed: 1.0,
     ttsVolume: 1.0,
-    targetLanguage: "fr", // langue par défaut ; remplacée seulement par un choix de l'utilisateur
-    // Deux langues : celle dans laquelle on LIT (targetLanguage : pages et texte affiché) et celle dans laquelle on ÉCRIT
-    // (writeLanguage : texte tapé dans un champ, traduit pour le destinataire).
+    targetLanguage: "fr", // default language; replaced only by a choice of the user
+    // Two languages: the one you READ in (targetLanguage: pages and displayed text) and the one you WRITE in
+    // (writeLanguage: text typed in a field, translated for the recipient).
     writeLanguage: "en",
     diagnostics: "yes", // journal de diagnostic (tableau de bord) ; "no" le coupe
-    targetLanguageFixed: "no", // "yes" une fois la langue remise à zéro après un ancien défaut (réparation unique)
-    targetLanguageChosen: "no", // "yes" dès que l'utilisateur choisit lui-même la langue : on ne la détecte plus
+    targetLanguageFixed: "no", // "yes" once the language was reset after an old default (one-time repair)
+    targetLanguageChosen: "no", // "yes" as soon as the user chooses the language themselves: it is no longer detected
     targetLanguageTextTranslation: null,
     targetLanguages: [], // "en", "es", "de"
     alwaysTranslateSites: [],
@@ -281,8 +281,8 @@ const twpConfig = (function () {
       }
       //*/
 
-      // Langue cible : on ne la remplace que si elle n'existe pas. (Avant : elle était aussi remplacée dès qu'elle
-      // n'était pas parmi les trois premières langues du navigateur, ce qui annulait tout choix à chaque redémarrage.)
+      // Target language: only replaced if it does not exist. (Before: it was also replaced as soon as it
+      // was not among the browser's first three languages, which cancelled any choice at every restart.)
       if (!config.targetLanguage) {
         config.targetLanguage = config.targetLanguages[0];
       }
@@ -315,7 +315,7 @@ const twpConfig = (function () {
         config.targetLanguageTextTranslation
       );
 
-      // Une langue valide choisie par l'utilisateur est gardée, même hors des trois langues du navigateur.
+      // A valid language chosen by the user is kept, even outside the browser's three languages.
       if (!config.targetLanguage) {
         config.targetLanguage = config.targetLanguages[0];
       }

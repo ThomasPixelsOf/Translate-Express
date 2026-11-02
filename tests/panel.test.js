@@ -1,47 +1,47 @@
-// Test de la bulle et du panneau (src/contentScript/panel.js) dans une page simulée (jsdom).
-// jsdom est cherché dans node_modules ; sans lui, ce fichier est ignoré.
+// Test of the bubble and the panel (src/contentScript/panel.js) in a simulated page (jsdom).
+// jsdom is looked up in node_modules; without it, this file is skipped.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
 let JSDOM = null;
-for (const chemin of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM } = require(chemin)); break; } catch (e) { /* suivant */ }
+for (const filePath of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
+  try { ({ JSDOM } = require(filePath)); break; } catch (e) { /* next */ }
 }
-const ignorer = JSDOM ? false : "jsdom introuvable";
-const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
+const skipReason = JSDOM ? false : "jsdom introuvable";
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const CODE = fs.readFileSync(path.join(__dirname, "..", "src", "contentScript", "panel.js"), "utf8");
 
-function creerPage({ afficherBulle = "yes" } = {}) {
+function createPage({ afficherBulle = "yes" } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>
-    <p id="p">Bonjour tout le monde, ceci est un texte de la page.</p>
+    <p id="p">Bonjour tout le monde, ceci est un text de la page.</p>
     <textarea id="t" style="width:300px">Bonjour a tous, voici mon message en francais pour vous.</textarea>
     <input id="mdp" type="password" value="secret-mot-de-passe">
   </body></html>`, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/" });
   const w = dom.window;
-  const envoyes = [];
+  const sentMessages = [];
   w.chrome = {
     runtime: {
       onMessage: { addListener() {} }, lastError: undefined,
       sendMessage: (m, cb) => {
-        envoyes.push(m);
-        if (cb) setTimeout(() => cb(m.action === "llmLive" ? { ok: true, text: "[traduit] " + m.text } : undefined), 0);
+        sentMessages.push(m);
+        if (cb) setTimeout(() => cb(m.action === "llmLive" ? { ok: true, text: "[translated] " + m.text } : undefined), 0);
       },
     },
     i18n: { getUILanguage: () => "fr" },
   };
-  const reglages = { showTranslateSelectedButton: afficherBulle, targetLanguage: "fr", writeLanguage: "en" };
-  const enregistres = [];
+  const settings = { showTranslateSelectedButton: afficherBulle, targetLanguage: "fr", writeLanguage: "en" };
+  const saved = [];
   w.twpConfig = {
-    get: (k) => (k in reglages ? reglages[k] : null),
-    set: (k, v) => { reglages[k] = v; enregistres.push([k, v]); }, onChanged() {},
+    get: (k) => (k in settings ? settings[k] : null),
+    set: (k, v) => { settings[k] = v; saved.push([k, v]); }, onChanged() {},
   };
   w.twpLang = {
     getLanguageList: () => ({ fr: "Français", en: "English" }), TargetLanguages: ["fr", "en"], fixTLanguageCode: (c) => c,
     fillLanguageSelect: (sel) => { for (const c of ["fr", "en"]) { const o = sel.ownerDocument.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); } },
   };
-  // jsdom ne calcule pas la mise en page : rectangles fournis à la main.
+  // jsdom does no layout: rectangles provided by hand.
   const rect = { left: 10, right: 200, top: 100, bottom: 130, width: 190, height: 30 };
   w.Range.prototype.getClientRects = () => [rect];
   w.Range.prototype.getBoundingClientRect = () => rect;
@@ -49,164 +49,164 @@ function creerPage({ afficherBulle = "yes" } = {}) {
   w.eval(CODE);
   const doc = w.document;
   return {
-    w, doc, envoyes, enregistres,
-    bulle: () => doc.querySelector("[data-twp-bubble]"),
-    panneau: () => { const h = doc.querySelector("[data-twp-panel]"); return h && h.shadowRoot.querySelector(".panel"); },
-    racinePanneau: () => doc.querySelector("[data-twp-panel]").shadowRoot,
-    relacher: () => doc.dispatchEvent(new w.MouseEvent("mouseup", { bubbles: true, composed: true, clientX: 100, clientY: 230 })),
+    w, doc, sentMessages, saved,
+    bubble: () => doc.querySelector("[data-twp-bubble]"),
+    panel: () => { const h = doc.querySelector("[data-twp-panel]"); return h && h.shadowRoot.querySelector(".panel"); },
+    panelRoot: () => doc.querySelector("[data-twp-panel]").shadowRoot,
+    release: () => doc.dispatchEvent(new w.MouseEvent("mouseup", { bubbles: true, composed: true, clientX: 100, clientY: 230 })),
   };
 }
 
-test("texte de la page sélectionné : la bulle ouvre un panneau en lecture seule près du texte", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("selected page text: the bubble opens a read-only panel near the text", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
-    const texte = page.doc.getElementById("p").firstChild;
-    const r = page.doc.createRange(); r.setStart(texte, 0); r.setEnd(texte, 7); // « Bonjour »
+    const text = page.doc.getElementById("p").firstChild;
+    const r = page.doc.createRange(); r.setStart(text, 0); r.setEnd(text, 7); // "Bonjour"
     page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
-    page.relacher();
-    await attendre(40);
-    assert.ok(page.bulle(), "la bulle apparaît");
-    page.bulle().shadowRoot.querySelector("button").click();
-    await attendre(40);
-    assert.equal(page.panneau().style.display, "block");
-    assert.equal(page.racinePanneau().querySelector(".replace").hidden, true, "pas de Replace pour du texte de page");
-    assert.ok(page.envoyes.some((m) => m.action === "llmLive" && m.text === "Bonjour"));
-    assert.equal(page.envoyes.filter((m) => m.action === "llmLive").at(-1).targetLanguage, "fr", "texte affiché : traduit dans la langue de LECTURE");
-    assert.equal(page.racinePanneau().querySelector(".what").textContent, "Read in");
+    page.release();
+    await wait(40);
+    assert.ok(page.bubble(), "the bubble appears");
+    page.bubble().shadowRoot.querySelector("button").click();
+    await wait(40);
+    assert.equal(page.panel().style.display, "block");
+    assert.equal(page.panelRoot().querySelector(".replace").hidden, true, "no Replace for page text");
+    assert.ok(page.sentMessages.some((m) => m.action === "llmLive" && m.text === "Bonjour"));
+    assert.equal(page.sentMessages.filter((m) => m.action === "llmLive").at(-1).targetLanguage, "fr", "displayed text: translated into the READING language");
+    assert.equal(page.panelRoot().querySelector(".what").textContent, "Read in");
   } finally { page.w.close(); }
 });
 
-test("texte écrit dans un champ puis sélectionné : bulle, traduction dans la langue choisie, Replace remplace seulement la sélection", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("text written in a field then selected: bubble, translation into the chosen language, Replace replaces only the selection", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
     const t = page.doc.getElementById("t");
     t.focus();
-    const debut = t.value.indexOf("voici");
-    const fin = t.value.indexOf(" pour vous");
-    t.setSelectionRange(debut, fin); // « voici mon message en francais »
-    const selectionne = t.value.slice(debut, fin);
-    page.relacher();
-    await attendre(40);
-    assert.ok(page.bulle(), "la bulle apparaît aussi pour un texte sélectionné dans un champ");
+    const start = t.value.indexOf("voici");
+    const end = t.value.indexOf(" pour vous");
+    t.setSelectionRange(start, end); // "voici mon message en francais"
+    const selected = t.value.slice(start, end);
+    page.release();
+    await wait(40);
+    assert.ok(page.bubble(), "the bubble also appears for text selected in a field");
 
-    page.bulle().shadowRoot.querySelector("button").click();
-    await attendre(40);
-    assert.equal(page.panneau().style.display, "block");
-    assert.equal(page.racinePanneau().querySelector(".replace").hidden, false, "Replace est proposé pour un champ");
-    assert.ok(page.envoyes.some((m) => m.action === "llmLive" && m.text === selectionne), "seule la sélection est traduite");
-    assert.equal(page.envoyes.filter((m) => m.action === "llmLive").at(-1).targetLanguage, "en", "texte écrit : traduit dans la langue d'ÉCRITURE");
-    assert.equal(page.racinePanneau().querySelector(".what").textContent, "Write in");
-    assert.equal(page.racinePanneau().querySelector(".out").textContent, "[traduit] " + selectionne);
+    page.bubble().shadowRoot.querySelector("button").click();
+    await wait(40);
+    assert.equal(page.panel().style.display, "block");
+    assert.equal(page.panelRoot().querySelector(".replace").hidden, false, "Replace is offered for a field");
+    assert.ok(page.sentMessages.some((m) => m.action === "llmLive" && m.text === selected), "only the selection is translated");
+    assert.equal(page.sentMessages.filter((m) => m.action === "llmLive").at(-1).targetLanguage, "en", "written text: translated into the WRITING language");
+    assert.equal(page.panelRoot().querySelector(".what").textContent, "Write in");
+    assert.equal(page.panelRoot().querySelector(".out").textContent, "[translated] " + selected);
 
-    // le clic dans le panneau fait perdre la sélection du champ : Replace la retrouve quand même
+    // the click in the panel makes the field lose its selection: Replace finds it again anyway
     t.setSelectionRange(0, 0);
-    page.racinePanneau().querySelector(".replace").click();
-    assert.equal(t.value, "Bonjour a tous, [traduit] " + selectionne + " pour vous.", "seule la partie sélectionnée est remplacée");
-    assert.equal(page.panneau().style.display, "none", "le panneau se ferme après le remplacement");
+    page.panelRoot().querySelector(".replace").click();
+    assert.equal(t.value, "Bonjour a tous, [translated] " + selected + " pour vous.", "only the selected part is replaced");
+    assert.equal(page.panel().style.display, "none", "the panel closes after the replacement");
   } finally { page.w.close(); }
 });
 
-test("changer de langue dans le panneau retraduit la sélection du champ", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("changing the language in the panel translates the field selection again", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
     const t = page.doc.getElementById("t");
-    t.focus(); t.setSelectionRange(0, 7); // « Bonjour »
-    page.relacher();
-    await attendre(40);
-    page.bulle().shadowRoot.querySelector("button").click();
-    await attendre(40);
-    const avant = page.envoyes.filter((m) => m.action === "llmLive").length;
-    const liste = page.racinePanneau().querySelector(".lang");
-    liste.value = "fr";
-    liste.dispatchEvent(new page.w.Event("change"));
-    await attendre(40);
-    const demandes = page.envoyes.filter((m) => m.action === "llmLive");
-    assert.ok(demandes.length > avant, "nouvelle traduction demandée");
-    assert.equal(demandes.at(-1).targetLanguage, "fr");
-    assert.equal(demandes.at(-1).text, "Bonjour");
-    assert.deepEqual(page.enregistres.at(-1), ["writeLanguage", "fr"], "sur du texte écrit, on change la langue d'écriture");
-    assert.ok(!page.enregistres.some(([k]) => k === "targetLanguage"), "la langue de lecture n'est pas touchée");
+    t.focus(); t.setSelectionRange(0, 7); // "Bonjour"
+    page.release();
+    await wait(40);
+    page.bubble().shadowRoot.querySelector("button").click();
+    await wait(40);
+    const before = page.sentMessages.filter((m) => m.action === "llmLive").length;
+    const list = page.panelRoot().querySelector(".lang");
+    list.value = "fr";
+    list.dispatchEvent(new page.w.Event("change"));
+    await wait(40);
+    const requests = page.sentMessages.filter((m) => m.action === "llmLive");
+    assert.ok(requests.length > before, "new translation requested");
+    assert.equal(requests.at(-1).targetLanguage, "fr");
+    assert.equal(requests.at(-1).text, "Bonjour");
+    assert.deepEqual(page.saved.at(-1), ["writeLanguage", "fr"], "on written text, the writing language is changed");
+    assert.ok(!page.saved.some(([k]) => k === "targetLanguage"), "the reading language is not touched");
   } finally { page.w.close(); }
 });
 
-test("pas de bulle : champ de mot de passe, sélection trop courte, bulle désactivée ; elle disparaît quand la sélection disparaît", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("no bubble: password field, selection too short, bubble turned off; it disappears when the selection disappears", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
     const mdp = page.doc.getElementById("mdp");
     mdp.focus(); mdp.setSelectionRange(0, 10);
-    page.relacher();
-    await attendre(40);
-    assert.ok(!page.bulle(), "jamais de bulle sur un mot de passe");
+    page.release();
+    await wait(40);
+    assert.ok(!page.bubble(), "never a bubble on a password");
 
     const t = page.doc.getElementById("t");
     t.focus(); t.setSelectionRange(0, 1);
-    page.relacher();
-    await attendre(40);
-    assert.ok(!page.bulle(), "un seul caractère : pas de bulle");
+    page.release();
+    await wait(40);
+    assert.ok(!page.bubble(), "a single character: no bubble");
 
     t.setSelectionRange(0, 7);
-    page.relacher();
-    await attendre(40);
-    assert.ok(page.bulle(), "sélection suffisante : bulle");
-    t.setSelectionRange(3, 3); // la sélection disparaît
+    page.release();
+    await wait(40);
+    assert.ok(page.bubble(), "enough selection: bubble");
+    t.setSelectionRange(3, 3); // the selection disappears
     page.doc.dispatchEvent(new page.w.Event("selectionchange"));
-    await attendre(20);
-    assert.ok(!page.bulle(), "la bulle disparaît avec la sélection");
+    await wait(20);
+    assert.ok(!page.bubble(), "the bubble disappears with the selection");
   } finally { page.w.close(); }
 });
 
-test("bulle désactivée dans le menu : rien n'apparaît", { skip: ignorer }, async () => {
-  const page = creerPage({ afficherBulle: "no" });
+test("bubble turned off in the menu: nothing appears", { skip: skipReason }, async () => {
+  const page = createPage({ afficherBulle: "no" });
   try {
     const t = page.doc.getElementById("t");
     t.focus(); t.setSelectionRange(0, 7);
-    page.relacher();
-    await attendre(40);
-    assert.ok(!page.bulle());
+    page.release();
+    await wait(40);
+    assert.ok(!page.bubble());
   } finally { page.w.close(); }
 });
 
-test("changer de langue sur du texte affiché change la langue de lecture, pas celle d'écriture", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("changing the language on displayed text changes the reading language, not the writing one", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
-    const texte = page.doc.getElementById("p").firstChild;
-    const r = page.doc.createRange(); r.setStart(texte, 0); r.setEnd(texte, 7);
+    const text = page.doc.getElementById("p").firstChild;
+    const r = page.doc.createRange(); r.setStart(text, 0); r.setEnd(text, 7);
     page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
-    page.relacher();
-    await attendre(40);
-    page.bulle().shadowRoot.querySelector("button").click();
-    await attendre(40);
-    const liste = page.racinePanneau().querySelector(".lang");
-    liste.value = "en";
-    liste.dispatchEvent(new page.w.Event("change"));
-    await attendre(40);
-    assert.deepEqual(page.enregistres.filter(([k]) => k === "targetLanguage").at(-1), ["targetLanguage", "en"]);
-    assert.ok(!page.enregistres.some(([k]) => k === "writeLanguage"));
+    page.release();
+    await wait(40);
+    page.bubble().shadowRoot.querySelector("button").click();
+    await wait(40);
+    const list = page.panelRoot().querySelector(".lang");
+    list.value = "en";
+    list.dispatchEvent(new page.w.Event("change"));
+    await wait(40);
+    assert.deepEqual(page.saved.filter(([k]) => k === "targetLanguage").at(-1), ["targetLanguage", "en"]);
+    assert.ok(!page.saved.some(([k]) => k === "writeLanguage"));
   } finally { page.w.close(); }
 });
 
-test("mémoire : rouvrir la bulle sur le même texte ne rappelle pas l'IA ; le bouton de rafraîchissement retraduit", { skip: ignorer }, async () => {
-  const page = creerPage();
+test("memory: reopening the bubble on the same text does not call the AI again; the refresh button translates again", { skip: skipReason }, async () => {
+  const page = createPage();
   try {
-    const texte = page.doc.getElementById("p").firstChild;
-    const ouvrir = async () => {
-      const r = page.doc.createRange(); r.setStart(texte, 0); r.setEnd(texte, 7);
+    const text = page.doc.getElementById("p").firstChild;
+    const openIt = async () => {
+      const r = page.doc.createRange(); r.setStart(text, 0); r.setEnd(text, 7);
       page.w.getSelection().removeAllRanges(); page.w.getSelection().addRange(r);
-      page.relacher();
-      await attendre(40);
-      page.bulle().shadowRoot.querySelector("button").click();
-      await attendre(40);
+      page.release();
+      await wait(40);
+      page.bubble().shadowRoot.querySelector("button").click();
+      await wait(40);
     };
-    const appels = () => page.envoyes.filter((m) => m.action === "llmLive").length;
-    await ouvrir();
-    assert.equal(appels(), 1);
-    page.racinePanneau().querySelector(".close").click();
-    await ouvrir();
-    assert.equal(appels(), 1, "même texte, même langue : traduction gardée en mémoire");
-    assert.match(page.racinePanneau().querySelector(".out").textContent, /traduit/);
-    assert.match(page.racinePanneau().querySelector(".status").textContent, /kept/);
-    page.racinePanneau().querySelector(".refresh").click();
-    await attendre(40);
-    assert.equal(appels(), 2, "le bouton force une nouvelle traduction");
+    const calls = () => page.sentMessages.filter((m) => m.action === "llmLive").length;
+    await openIt();
+    assert.equal(calls(), 1);
+    page.panelRoot().querySelector(".close").click();
+    await openIt();
+    assert.equal(calls(), 1, "same text, same language: translation kept in memory");
+    assert.match(page.panelRoot().querySelector(".out").textContent, /translated/);
+    assert.match(page.panelRoot().querySelector(".status").textContent, /kept/);
+    page.panelRoot().querySelector(".refresh").click();
+    await wait(40);
+    assert.equal(calls(), 2, "the button forces a new translation");
   } finally { page.w.close(); }
 });

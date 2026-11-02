@@ -1,6 +1,6 @@
-// Fenêtre de message : on écrit à gauche, la traduction arrive en direct à droite.
-// Zéro réglage : source détectée, langue cible = dernière utilisée (sinon la langue du navigateur),
-// IA (Groq) si une clé est enregistrée, sinon le traducteur gratuit d'origine.
+// Message window: you write on the left, the translation arrives live on the right.
+// Zero configuration: source detected, target language = last one used (otherwise the browser language),
+// AI (Groq) if a key is saved, otherwise the original free translator.
 (function () {
   "use strict";
   const $ = (s) => document.querySelector(s);
@@ -9,12 +9,12 @@
   const KEY_TONE = "composerTone";
 
   const params = new URLSearchParams(location.search);
-  const docked = params.get("dock") === "1"; // affiché dans le volet de la page (sinon : fenêtre séparée)
+  const docked = params.get("dock") === "1"; // shown in the page's panel (otherwise: separate window)
   const toParent = (message) => window.parent.postMessage(message, "*");
   const openerTabId = params.has("tab") ? Number(params.get("tab")) : null;
 
   let timer = null;
-  let ticket = 0; // chaque requête a un numéro : une réponse en retard est ignorée
+  let ticket = 0; // each request has a number: a late answer is ignored
   let aiAvailable = false;
 
   const fillLanguages = (select, withAuto) => twpLang.fillLanguageSelect(select, { auto: withAuto });
@@ -72,7 +72,7 @@
     let r;
     if (aiAvailable) {
       r = await translateViaAi(text, source, target, $("#tone").value);
-      // Si l'IA échoue (limite atteinte, clé refusée...), on bascule sur le service gratuit au lieu de rester bloqué.
+      // If the AI fails (limit reached, key refused...), switch to the free service instead of staying blocked.
       if (!r.ok && r.error !== "no-key") {
         const fallback = await translateViaFreeService(text, source, target);
         if (fallback.ok) r = { ...fallback, fallback: r.error };
@@ -80,7 +80,7 @@
     } else {
       r = await translateViaFreeService(text, source, target);
     }
-    if (mine !== ticket) return; // une saisie plus récente a pris le relais
+    if (mine !== ticket) return; // a more recent input took over
     if (r.ok) {
       $("#output").value = r.text;
       setStatus(r.fallback ? "Free translator (AI: " + r.fallback + ")" : aiAvailable ? "AI" : "Free translator");
@@ -99,7 +99,7 @@
     fillLanguages($("#target"), false);
     $("#source").value = remembered(KEY_SOURCE, "auto");
     const ui = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
-    // La fenêtre de message sert à écrire : sa langue cible est la langue d'écriture.
+    // The message window is for writing: its target language is the writing language.
     $("#target").value = twpConfig.get("writeLanguage") || "en";
     $("#tone").value = remembered(KEY_TONE, "");
 
@@ -123,7 +123,7 @@
     };
     $("#swap").onclick = () => {
       const src = $("#source").value === "auto" ? null : $("#source").value;
-      if (!src) return; // on ne sait pas vers quelle langue repasser tant que la source n'est pas fixée
+      if (!src) return; // we do not know which language to switch back to until the source is set
       const out = $("#output").value;
       $("#source").value = $("#target").value;
       $("#target").value = src;
@@ -150,7 +150,7 @@
       setStatus("Copied");
     };
     if (docked) {
-      // Dans le volet : on écrit dans le champ de la page par la page elle-même.
+      // In the panel: the page itself writes into the page's field.
       $("#insert").hidden = false;
       $("#insert").onclick = () => {
         const text = $("#output").value;
@@ -180,7 +180,7 @@
         });
       };
     }
-    // Ctrl+Entrée : copier la traduction
+    // Ctrl+Enter: copy the translation
     document.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
@@ -194,7 +194,7 @@
     });
   }
 
-  // Texte déjà écrit dans un champ de la page (bouton « Window » du panneau) : repris tel quel, une seule fois.
+  // Text already written in a page field ("Window" button of the panel): taken over as is, only once.
   function loadDraft() {
     chrome.storage.local.get("composerDraft", (r) => {
       checkedLastError();

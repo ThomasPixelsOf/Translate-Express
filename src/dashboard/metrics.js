@@ -1,5 +1,5 @@
-// Calculs du tableau de bord à partir du journal de diagnostic (événements de background/diagnostics.js) : fichier pur,
-// sans accès au navigateur, donc testable. Utilisé par dashboard.js.
+// Dashboard calculations from the diagnostic log (events from background/diagnostics.js): pure file,
+// without browser access, so it is testable. Used by dashboard.js.
 var twpMetrics = (function () {
   const avg = (a) => (a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : 0);
   const max = (a) => (a.length ? Math.max(...a) : 0);
@@ -23,14 +23,14 @@ var twpMetrics = (function () {
     const tokensLast60s = ok.filter((e) => now - e.t < 60000).reduce((s, e) => s + tokensOf(e), 0);
     const budgetLimit = llm.length ? llm[llm.length - 1].budgetLimit || 0 : 0;
 
-    // Jetons par tranche de 10 s sur les 10 dernières minutes (pour le graphique)
+    // Tokens per 10 s bucket over the last 10 minutes (for the chart)
     const buckets = Array.from({ length: 60 }, () => 0);
     for (const e of ok) {
       const age = now - e.t;
       if (age >= 0 && age < 600000) buckets[59 - Math.floor(age / 10000)] += tokensOf(e);
     }
 
-    // Une « session » = une traduction de page (page.start) avec ses envois et résultats
+    // A "session" = a page translation (page.start) with its sends and results
     const sessions = [];
     for (const e of events) {
       if (e.type === "page.start") sessions.push({ t: e.t, host: e.host, pieces: e.pieces, tab: e.tab, sent: 0, results: 0, firstVisibleMs: null, lastResultMs: null, progress: null });
@@ -93,7 +93,7 @@ var twpMetrics = (function () {
       events: events.length,
     };
 
-    // Constats en clair : ce qui explique la lenteur ou le texte qui manque
+    // Findings in plain words: what explains the slowness or the missing text
     const v = r.verdicts;
     if (r.requests.total === 0 && r.html.calls === 0) v.push({ level: "info", text: "No translation recorded yet. Translate a page, then refresh." });
     if (r.waits.avgBudgetMs > 1500 && r.waits.avgBudgetMs >= r.requests.avgMs)
@@ -128,7 +128,7 @@ var twpMetrics = (function () {
     return hhmmss(t) + " " + type + (detail ? " " + detail : "");
   }
 
-  /** Rapport texte à copier-coller (constats, chiffres, état de la page, derniers événements). */
+  /** Text report to copy and paste (findings, figures, page state, last events). */
   function buildReport(s, pageReport, events, now = Date.now()) {
     const out = ["# Translate Express - diagnostic report (" + new Date(now).toISOString() + ")", "", "## Findings"];
     s.verdicts.forEach((x) => out.push("- [" + x.level + "] " + x.text));

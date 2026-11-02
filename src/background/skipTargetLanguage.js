@@ -1,15 +1,15 @@
-// Pages en plusieurs langues : les blocs de texte déjà écrits dans la langue cible ne sont pas retraduits.
-// (Le traducteur de TWP envoyait tout, en laissant le service deviner la langue de chaque bloc : du temps et des appels
-// perdus, et avec une IA le risque de voir le français reformulé.)
-// La langue de chaque bloc est détectée localement par le navigateur (chrome.i18n.detectLanguage), sans réseau.
+// Multilingual pages: blocks of text already written in the target language are not translated again.
+// (TWP's translator sent everything, letting the service guess the language of each block: wasted time and calls,
+// and with an AI the risk of seeing French reworded.)
+// The language of each block is detected locally by the browser (chrome.i18n.detectLanguage), without network.
 
 var twpSkip = (function () {
-  const MIN_CHARS = 25; // en dessous, la détection n'est pas fiable : le bloc est traduit normalement
-  const MIN_SHARE = 70; // part minimale (en %) de la langue détectée dans le bloc
+  const MIN_CHARS = 25; // below this, detection is not reliable: the block is translated normally
+  const MIN_SHARE = 70; // minimum share (in %) of the detected language in the block
 
   const base = (code) => String(code).split("-")[0].toLowerCase();
 
-  // « pt » et « pt-PT » sont la même langue pour ce filtre ; le chinois simplifié et traditionnel ne le sont pas.
+  // "pt" and "pt-PT" are the same language for this filter; Simplified and Traditional Chinese are not.
   function sameLanguage(a, b, fix) {
     const x = fix(a) || a;
     const y = fix(b) || b;
@@ -19,18 +19,18 @@ var twpSkip = (function () {
   }
 
   /**
-   * @param {Array<string[]>} sourceArray2d blocs de texte (chaque bloc = liste de morceaux)
+   * @param {Array<string[]>} sourceArray2d text blocks (each block = list of pieces)
    * @param {string} targetLanguage
    * @param {(text: string) => Promise<{isReliable: boolean, languages: Array<{language: string, percentage: number}>}>} detect
-   * @param {(code: string) => string | undefined} fix normalisation des codes de langue (twpLang.fixTLanguageCode)
-   * @returns {Promise<boolean[]>} true quand le bloc est déjà dans la langue cible
+   * @param {(code: string) => string | undefined} fix normalization of language codes (twpLang.fixTLanguageCode)
+   * @returns {Promise<boolean[]>} true when the block is already in the target language
    */
   async function alreadyInTarget(sourceArray2d, targetLanguage, detect, fix = (c) => c) {
     return await Promise.all(
       sourceArray2d.map(async (block) => {
-        // Un bloc de plusieurs morceaux (texte coupé par des balises, des sauts de ligne...) peut mélanger deux langues :
-        // la détection globale donnerait la langue majoritaire et le reste ne serait jamais traduit. On ne filtre donc que
-        // les blocs d'un seul morceau ; les autres sont envoyés (le traducteur laisse tel quel ce qui est déjà dans la langue cible).
+        // A block of several pieces (text cut by tags, line breaks...) can mix two languages:
+        // global detection would give the majority language and the rest would never be translated. So only
+        // single-piece blocks are filtered; the others are sent (the translator leaves as is what is already in the target language).
         if (block.length !== 1) return false;
         const text = block.join(" ").trim();
         if (text.length < MIN_CHARS) return false;
@@ -45,7 +45,7 @@ var twpSkip = (function () {
     );
   }
 
-  // Détecteur du navigateur, sous forme de promesse (absent : rien n'est filtré).
+  // Browser detector, as a promise (absent: nothing is filtered).
   function browserDetect(text) {
     return new Promise((resolve) => {
       try {
@@ -61,7 +61,7 @@ var twpSkip = (function () {
   }
 
   /**
-   * Traduit uniquement les blocs qui ne sont pas déjà dans la langue cible ; les autres sont rendus tels quels.
+   * Translates only the blocks that are not already in the target language; the others are returned as they are.
    * @param {(blocks: Array<string[]>) => Promise<Array<string[]>>} translateBlocks
    */
   async function translateSkippingTarget(sourceArray2d, targetLanguage, translateBlocks, detect = browserDetect, fix) {

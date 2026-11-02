@@ -1,12 +1,12 @@
 "use strict";
 
-// Rechargement automatique pendant le développement : l'extension surveille ses propres fichiers (Chrome et Brave les
-// relisent sur le disque pour une extension non empaquetée) et se recharge toute seule quand l'un d'eux change.
-// Plus besoin de cliquer sur « Recharger » dans brave://extensions : il reste à rafraîchir (F5) la page testée, car les
-// onglets déjà ouverts gardent l'ancien script de page.
+// Automatic reload during development: the extension watches its own files (Chrome and Brave
+// re-read them from disk for an unpacked extension) and reloads itself when one of them changes.
+// No more clicking "Reload" in brave://extensions: the tested page still has to be refreshed (F5), because
+// tabs already open keep the old page script.
 //
-// Délai : jusqu'à 30 secondes (le réveil du service worker se fait par une alarme, 30 s minimum dans Chrome).
-// Pour désactiver : retirer la ligne « devReload.js » de bg.js (et la permission « alarms » du manifeste).
+// Delay: up to 30 seconds (the service worker wakes up through an alarm, 30 s minimum in Chrome).
+// To turn off: remove the "devReload.js" line from bg.js (and the "alarms" permission from the manifest).
 
 const DEV_FILES = [
   "/background/devReload.js", "/background/diagnostics.js", "/background/llmService.js", "/background/menu.js", "/background/skipTargetLanguage.js", "/background/translationCache.js",
@@ -19,7 +19,7 @@ const DEV_FILES = [
 const DEV_ALARM = "twp-dev-reload";
 const DEV_STORAGE_KEY = "devFilesStamp";
 
-// Empreinte de tous les fichiers : change dès qu'un seul octet change.
+// Fingerprint of all the files: changes as soon as a single byte changes.
 async function devFilesStamp() {
   const parts = [];
   for (const file of DEV_FILES) {
@@ -34,7 +34,7 @@ async function devFilesStamp() {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Compare avec l'empreinte mémorisée (elle survit au sommeil du service worker) ; différente : on recharge.
+// Compare with the remembered fingerprint (it survives the service worker's sleep); different: reload.
 async function devCheckForChanges() {
   const stamp = await devFilesStamp();
   const stored = await chrome.storage.local.get(DEV_STORAGE_KEY);
@@ -45,7 +45,7 @@ async function devCheckForChanges() {
     chrome.runtime.reload();
     return true;
   }
-  return false; // premier démarrage : on mémorise seulement
+  return false; // first start: only remember it
 }
 
 chrome.alarms.create(DEV_ALARM, { periodInMinutes: 0.5 });

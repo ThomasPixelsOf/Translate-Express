@@ -32,7 +32,7 @@ twpConfig.onReady(function () {
     any: !platformInfo.isMobile.any
   };
 
-  platformInfo.isFirefox = typeof browser !== "undefined"; //TODO: corrijir isso, pois o Chrome também tem browser definido a partir de v148
+  platformInfo.isFirefox = typeof browser !== "undefined"; //TODO: fix this, since Chrome also has browser defined from v148
   platformInfo.isOpera = userAgent.match(/OPR/i);
 
   platformInfo.supportsCommandsUpdate = function () {

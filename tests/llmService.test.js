@@ -1,12 +1,12 @@
-// Tests du service de traduction par modèle de langage (src/background/llmService.js), sans réseau :
-// `fetch` est remplacé par un faux serveur compatible OpenAI.
+// Tests of the language-model translation service (src/background/llmService.js), without network:
+// `fetch` is replaced by a fake OpenAI-compatible server.
 // Lancer : node --test tests/
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const twpLlm = require("../src/background/llmService.js");
 
-// Version minimale de la classe `Service` de translationService.js (seuls les champs utilisés par llmService).
-class FauxService {
+// Minimal version of the `Service` class of translationService.js (only the fields llmService uses).
+class FakeService {
   constructor(serviceName, baseURL, xhrMethod, cbTransformRequest, cbParseResponse, cbTransformResponse) {
     Object.assign(this, { serviceName, baseURL, xhrMethod, cbTransformRequest, cbParseResponse, cbTransformResponse });
   }
@@ -15,17 +15,17 @@ const Utils = {
   escapeHTML: (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
   unescapeHTML: (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
 };
-const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
-twpLlm._test.configurerBudget({ limite: 1e9 });
-const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "un-modele/test-1" };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+twpLlm._test.configureBudget({ limit: 1e9 });
+const config = { provider: "groq", apiKey: "gsk_1234567890abcdef", model: "some-model/test-1" };
 
-function fauxFetch(reponses) {
-  twpLlm._test.reinitialiserBudget(); // un blocage ou des dépenses d'un test précédent ne doivent pas gêner celui-ci
-  const appels = [];
+function fakeFetch(reponses) {
+  twpLlm._test.resetBudget(); // a block or spending from a previous test must not get in the way of this one
+  const calls = [];
   global.fetch = async (url, init) => {
-    appels.push({ url, init, corps: init && init.body ? JSON.parse(init.body) : null });
+    calls.push({ url, init, body: init && init.body ? JSON.parse(init.body) : null });
     const r = reponses.shift();
-    if (r.reseau) throw new Error("réseau coupé");
+    if (r.network) throw new Error("network down");
     return {
       ok: r.status === undefined || r.status < 400,
       status: r.status ?? 200,
@@ -33,284 +33,284 @@ function fauxFetch(reponses) {
       json: async () => r.json ?? { choices: [{ message: { content: r.content } }] },
     };
   };
-  return appels;
+  return calls;
 }
 
-test("extraireTableau accepte un objet, un tableau, un bloc de code et la réflexion du modèle", () => {
-  const { extraireTableau } = twpLlm._test;
-  assert.deepEqual(extraireTableau('{"translations":["a","b"]}'), ["a", "b"]);
-  assert.deepEqual(extraireTableau('["a","b"]'), ["a", "b"]);
-  assert.deepEqual(extraireTableau('```json\n{"translations":["a"]}\n```'), ["a"]);
-  assert.deepEqual(extraireTableau('<think>je réfléchis { [ }</think>{"translations":["ok"]}'), ["ok"]);
-  assert.throws(() => extraireTableau("pas du json"));
-  assert.throws(() => extraireTableau('{"translations":[1,2]}'));
+test("extractArray accepts an object, an array, a code block and the model's thinking", () => {
+  const { extractArray } = twpLlm._test;
+  assert.deepEqual(extractArray('{"translations":["a","b"]}'), ["a", "b"]);
+  assert.deepEqual(extractArray('["a","b"]'), ["a", "b"]);
+  assert.deepEqual(extractArray('```json\n{"translations":["a"]}\n```'), ["a"]);
+  assert.deepEqual(extractArray('<think>I am thinking { [ }</think>{"translations":["ok"]}'), ["ok"]);
+  assert.throws(() => extractArray("not json"));
+  assert.throws(() => extractArray('{"translations":[1,2]}'));
 });
 
-test("decouperReponse retrouve les morceaux <a i=N>, les remet dans l'ordre et enlève l'échappement HTML", () => {
-  const { decouperReponse } = twpLlm._test;
-  const sortie = decouperReponse("<pre><a i=1>B &amp; b</a><a i=0>A</a></pre>", false, Utils.unescapeHTML);
-  assert.deepEqual(sortie, ["A", "B & b"]);
-  assert.deepEqual(decouperReponse("<pre><a i=1>B</a><a i=0>A</a></pre>", true, Utils.unescapeHTML), ["B", "A"]);
-  assert.deepEqual(decouperReponse("<pre>Bonjour</pre>", false, Utils.unescapeHTML), ["Bonjour"]);
+test("splitAnswer finds the <a i=N> pieces, puts them back in order and removes the HTML escaping", () => {
+  const { splitAnswer } = twpLlm._test;
+  const output = splitAnswer("<pre><a i=1>B &amp; b</a><a i=0>A</a></pre>", false, Utils.unescapeHTML);
+  assert.deepEqual(output, ["A", "B & b"]);
+  assert.deepEqual(splitAnswer("<pre><a i=1>B</a><a i=0>A</a></pre>", true, Utils.unescapeHTML), ["B", "A"]);
+  assert.deepEqual(splitAnswer("<pre>Bonjour</pre>", false, Utils.unescapeHTML), ["Bonjour"]);
 });
 
-test("le service traduit un lot en une seule requête et envoie la clé uniquement à l'adresse du fournisseur", async () => {
-  const service = twpLlm.create(FauxService, Utils, config);
+test("the service translates a batch in a single request and sends the key only to the provider's address", async () => {
+  const service = twpLlm.create(FakeService, Utils, config);
   assert.equal(service.baseURL, "https://api.groq.com/openai/v1/chat/completions");
   assert.equal(service.maxRequestSize, 1800);
-  assert.match(service.serviceName, /^llm-un_modele_test_1$/);
-  const appels = fauxFetch([{ content: '{"translations":["<pre>Bonjour</pre>","<pre><a i=0>Un</a><a i=1>Deux</a></pre>"]}' }]);
-  const rep = await service.makeRequest("en", "fr", [{ originalText: "<pre>Hello</pre>" }, { originalText: "<pre><a i=0>One</a><a i=1>Two</a></pre>" }]);
-  assert.equal(appels.length, 1);
-  assert.equal(appels[0].init.headers.Authorization, "Bearer gsk_1234567890abcdef");
-  assert.equal(appels[0].corps.model, "un-modele/test-1");
-  assert.deepEqual(JSON.parse(appels[0].corps.messages[1].content), ["<pre>Hello</pre>", "<pre><a i=0>One</a><a i=1>Two</a></pre>"]);
-  assert.match(appels[0].corps.messages[0].content, /English to French/);
-  assert.deepEqual(rep, ["<pre>Bonjour</pre>", "<pre><a i=0>Un</a><a i=1>Deux</a></pre>"]);
-  assert.deepEqual(service.cbTransformResponse(rep[1], false), ["Un", "Deux"]);
+  assert.match(service.serviceName, /^llm-some_model_test_1$/);
+  const calls = fakeFetch([{ content: '{"translations":["<pre>Bonjour</pre>","<pre><a i=0>Un</a><a i=1>Deux</a></pre>"]}' }]);
+  const result = await service.makeRequest("en", "fr", [{ originalText: "<pre>Hello</pre>" }, { originalText: "<pre><a i=0>One</a><a i=1>Two</a></pre>" }]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.headers.Authorization, "Bearer gsk_1234567890abcdef");
+  assert.equal(calls[0].body.model, "some-model/test-1");
+  assert.deepEqual(JSON.parse(calls[0].body.messages[1].content), ["<pre>Hello</pre>", "<pre><a i=0>One</a><a i=1>Two</a></pre>"]);
+  assert.match(calls[0].body.messages[0].content, /English to French/);
+  assert.deepEqual(result, ["<pre>Bonjour</pre>", "<pre><a i=0>Un</a><a i=1>Deux</a></pre>"]);
+  assert.deepEqual(service.cbTransformResponse(result[1], false), ["Un", "Deux"]);
 });
 
-test("longueur incorrecte : le service coupe le lot en deux et traduit les moitiés", async () => {
-  const service = twpLlm.create(FauxService, Utils, config);
-  const appels = fauxFetch([
+test("wrong length: the service splits the batch in two and translates the halves", async () => {
+  const service = twpLlm.create(FakeService, Utils, config);
+  const calls = fakeFetch([
     { content: '{"translations":["seulement un"]}' },
     { content: '{"translations":["un"]}' },
     { content: '{"translations":["deux"]}' },
   ]);
-  const rep = await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }, { originalText: "<pre>two</pre>" }]);
-  assert.deepEqual(rep, ["un", "deux"]);
-  assert.equal(appels.length, 3);
+  const result = await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }, { originalText: "<pre>two</pre>" }]);
+  assert.deepEqual(result, ["un", "deux"]);
+  assert.equal(calls.length, 3);
 });
 
-test("une erreur 429 est retentée ; une erreur 401 ne l'est pas", async () => {
-  const service = twpLlm.create(FauxService, Utils, config);
-  const appels = fauxFetch([{ status: 429, retryAfter: "0" }, { content: '{"translations":["ok"]}' }]);
+test("a 429 error is retried; a 401 error is not", async () => {
+  const service = twpLlm.create(FakeService, Utils, config);
+  const calls = fakeFetch([{ status: 429, retryAfter: "0" }, { content: '{"translations":["ok"]}' }]);
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), ["ok"]);
-  assert.equal(appels.length, 2);
+  assert.equal(calls.length, 2);
 
-  const appels2 = fauxFetch([{ status: 401, json: { error: { message: "Invalid API Key" } } }]);
+  const calls2 = fakeFetch([{ status: 401, json: { error: { message: "Invalid API Key" } } }]);
   await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /401.*Invalid API Key/);
-  assert.equal(appels2.length, 1);
+  assert.equal(calls2.length, 1);
 });
 
-test("sans clé, adresse ou modèle, le service refuse sans appeler le réseau", async () => {
-  const service = twpLlm.create(FauxService, Utils, { provider: "groq", apiKey: "", model: "m" });
-  const appels = fauxFetch([]);
-  await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /non configuré/);
-  assert.equal(appels.length, 0);
+test("without key, address or model, the service refuses without calling the network", async () => {
+  const service = twpLlm.create(FakeService, Utils, { provider: "groq", apiKey: "", model: "m" });
+  const calls = fakeFetch([]);
+  await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /not configured/);
+  assert.equal(calls.length, 0);
 });
 
-test("tester() renvoie la phrase traduite et la durée", async () => {
-  fauxFetch([{ content: '{"translations":["Bonjour, comment allez-vous aujourd’hui ?"]}' }]);
+test("tester() returns the translated sentence and the duration", async () => {
+  fakeFetch([{ content: '{"translations":["Bonjour, comment allez-vous aujourd’hui ?"]}' }]);
   const r = await twpLlm.tester(config);
   assert.match(r.text, /Bonjour/);
   assert.equal(typeof r.ms, "number");
 });
 
-test("le fournisseur se reconnaît à la clé, sans aucun réglage", () => {
-  assert.equal(twpLlm.detecterFournisseur("gsk_abc123"), "groq");
-  assert.equal(twpLlm.detecterFournisseur("autre"), "custom");
-  const cfg = twpLlm.normaliser({ apiKey: "gsk_abc123" });
+test("the provider is recognized from the key, without any setting", () => {
+  assert.equal(twpLlm.detectProvider("gsk_abc123"), "groq");
+  assert.equal(twpLlm.detectProvider("autre"), "custom");
+  const cfg = twpLlm.normalize({ apiKey: "gsk_abc123" });
   assert.equal(cfg.provider, "groq");
   assert.equal(cfg.url, "https://api.groq.com/openai/v1/chat/completions");
 });
 
-test("sans modèle saisi : Groq choisit le premier modèle préféré disponible, une seule fois", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef" });
-  const appels = fauxFetch([
+test("without a typed model: Groq picks the first preferred model available, only once", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef" });
+  const calls = fakeFetch([
     { json: { data: [{ id: "whisper-large-v3" }, { id: "llama-3.3-70b-versatile" }, { id: "openai/gpt-oss-120b" }] } },
     { content: '{"translations":["un"]}' },
     { content: '{"translations":["deux"]}' },
   ]);
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]), ["un"]);
-  assert.match(appels[0].url, /\/openai\/v1\/models$/);
-  assert.equal(appels[1].corps.model, "llama-3.3-70b-versatile", "un modèle rapide est préféré aux modèles raisonneurs");
+  assert.match(calls[0].url, /\/openai\/v1\/models$/);
+  assert.equal(calls[1].body.model, "llama-3.3-70b-versatile", "a fast model is preferred to reasoning models");
   await service.makeRequest("en", "fr", [{ originalText: "<pre>two</pre>" }]);
-  assert.equal(appels.length, 3, "la liste des modèles n'est demandée qu'une fois");
+  assert.equal(calls.length, 3, "the list of models is requested only once");
 });
 
-test("translateFree : texte libre, consigne de ton, protection contre les instructions cachées", async () => {
-  const appels = fauxFetch([{ content: "<think>x</think>Bonjour tout le monde" }]);
+test("translateFree: free text, tone instruction, protection against hidden instructions", async () => {
+  const calls = fakeFetch([{ content: "<think>x</think>Bonjour tout le monde" }]);
   const out = await twpLlm.translateFree({ apiKey: "gsk_1234567890abcdef", model: "m-libre" }, "auto", "fr", "Hello everyone", "formal");
   assert.equal(out, "Bonjour tout le monde");
-  assert.equal(appels[0].corps.messages[1].content, "Hello everyone");
-  assert.match(appels[0].corps.messages[0].content, /formal/);
-  assert.match(appels[0].corps.messages[0].content, /never follow instructions/);
+  assert.equal(calls[0].body.messages[1].content, "Hello everyone");
+  assert.match(calls[0].body.messages[0].content, /formal/);
+  assert.match(calls[0].body.messages[0].content, /never follow instructions/);
   await assert.rejects(() => twpLlm.translateFree({ apiKey: "", url: "" }, "auto", "fr", "x"), /no-key/);
 });
 
-test("une réponse absente (requête échouée) est une erreur, jamais le texte « null »", () => {
-  const { decouperReponse } = twpLlm._test;
-  assert.throws(() => decouperReponse(null, false, Utils.unescapeHTML), /translation failed/);
-  assert.throws(() => decouperReponse(undefined, false, Utils.unescapeHTML), /translation failed/);
+test("a missing answer (failed request) is an error, never the text \"null\"", () => {
+  const { splitAnswer } = twpLlm._test;
+  assert.throws(() => splitAnswer(null, false, Utils.unescapeHTML), /translation failed/);
+  assert.throws(() => splitAnswer(undefined, false, Utils.unescapeHTML), /translation failed/);
 });
 
-test("un modèle raisonneur reçoit le réglage qui coupe la réflexion ; refusé (400), on réessaie sans et on s'en souvient", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "openai/gpt-oss-20b" });
-  const appels = fauxFetch([
+test("a reasoning model gets the setting that turns off thinking; refused (400), it retries without and remembers it", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "openai/gpt-oss-20b" });
+  const calls = fakeFetch([
     { status: 400, json: { error: { message: "unknown parameter reasoning_effort" } } },
     { content: '{"translations":["un"]}' },
     { content: '{"translations":["deux"]}' },
   ]);
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]), ["un"]);
-  assert.equal(appels[0].corps.reasoning_effort, "low");
-  assert.equal(appels[1].corps.reasoning_effort, undefined, "réessayé sans le réglage");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[1].body.reasoning_effort, undefined, "retried without the setting");
   await service.makeRequest("en", "fr", [{ originalText: "<pre>two</pre>" }]);
-  assert.equal(appels[2].corps.reasoning_effort, undefined, "le refus est mémorisé");
+  assert.equal(calls[2].body.reasoning_effort, undefined, "the refusal is remembered");
 });
 
-test("un modèle non raisonneur ne reçoit aucun réglage supplémentaire", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "llama-3.3-70b-versatile" });
-  const appels = fauxFetch([{ content: '{"translations":["un"]}' }]);
+test("a non-reasoning model gets no extra setting", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "llama-3.3-70b-versatile" });
+  const calls = fakeFetch([{ content: '{"translations":["un"]}' }]);
   await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }]);
-  assert.equal(appels[0].corps.reasoning_effort, undefined);
+  assert.equal(calls[0].body.reasoning_effort, undefined);
 });
 
-test("limite de débit longue : abandon immédiat (pas d'attente de plusieurs dizaines de secondes)", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-limite" });
-  const appels = fauxFetch([{ status: 429, retryAfter: "45" }]);
+test("long rate limit: immediate give-up (no waiting for tens of seconds)", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-limit" });
+  const calls = fakeFetch([{ status: 429, retryAfter: "45" }]);
   const t0 = Date.now();
   await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]), /rate limited/);
   assert.ok(Date.now() - t0 < 1000, "abandon rapide");
-  assert.equal(appels.length, 1, "aucune nouvelle tentative");
+  assert.equal(calls.length, 1, "no new attempt");
 });
 
-test("lots plus petits (1800 caractères) pour pouvoir partir en parallèle", () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m" });
+test("smaller batches (1800 characters) so they can go in parallel", () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m" });
   assert.equal(service.maxRequestSize, 1800);
 });
 
-test("structure : si le modèle fusionne deux morceaux d'un bloc, le bloc est retraduit morceau par morceau (aucun morceau perdu)", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-structure" });
-  const bloc = "<pre><a i=0>One</a><a i=1>Two</a><a i=2>Three</a></pre>";
-  const appels = fauxFetch([
-    { content: JSON.stringify({ translations: ["<pre><a i=0>Un</a><a i=1>Deux Trois</a></pre>"] }) }, // 2 morceaux au lieu de 3
-    { content: JSON.stringify({ translations: ["<pre>Un</pre>", "<pre>Deux</pre>", "<pre>Trois</pre>"] }) }, // retraduit un par un
+test("structure: if the model merges two pieces of a block, the block is translated again piece by piece (no piece lost)", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-structure" });
+  const block = "<pre><a i=0>One</a><a i=1>Two</a><a i=2>Three</a></pre>";
+  const calls = fakeFetch([
+    { content: JSON.stringify({ translations: ["<pre><a i=0>Un</a><a i=1>Deux Trois</a></pre>"] }) }, // 2 parts au lieu de 3
+    { content: JSON.stringify({ translations: ["<pre>Un</pre>", "<pre>Deux</pre>", "<pre>Trois</pre>"] }) }, // translated again one by one
   ]);
-  const rep = await service.makeRequest("en", "fr", [{ originalText: bloc }]);
-  assert.equal(appels.length, 2);
-  assert.deepEqual(JSON.parse(appels[1].corps.messages[1].content), ["<pre>One</pre>", "<pre>Two</pre>", "<pre>Three</pre>"]);
-  assert.deepEqual(service.cbTransformResponse(rep[0], false), ["Un", "Deux", "Trois"]);
+  const result = await service.makeRequest("en", "fr", [{ originalText: block }]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(JSON.parse(calls[1].body.messages[1].content), ["<pre>One</pre>", "<pre>Two</pre>", "<pre>Three</pre>"]);
+  assert.deepEqual(service.cbTransformResponse(result[0], false), ["Un", "Deux", "Trois"]);
 });
 
-test("structure : numéros de morceaux non consécutifs ou balises perdues = bloc invalide ; un bloc correct n'est pas retraduit", () => {
-  const { structureValide, extrairePieces } = twpLlm._test;
+test("structure: non-consecutive piece numbers or lost tags = invalid block; a correct block is not translated again", () => {
+  const { validStructure, extractPieces } = twpLlm._test;
   const source = "<pre><a i=0>A</a><a i=1>B</a></pre>";
-  assert.equal(structureValide(source, "<pre><a i=0>a</a><a i=1>b</a></pre>"), true);
-  assert.equal(structureValide(source, "<pre><a i=0>a</a><a i=2>b</a></pre>"), false, "numéros 0 et 2");
-  assert.equal(structureValide(source, "<pre>a b</pre>"), false, "balises perdues");
-  assert.equal(structureValide("<pre>Un seul morceau</pre>", "<pre>Un seul</pre>"), true, "bloc simple : rien à contrôler");
-  assert.deepEqual(extrairePieces(source), ["A", "B"]);
+  assert.equal(validStructure(source, "<pre><a i=0>a</a><a i=1>b</a></pre>"), true);
+  assert.equal(validStructure(source, "<pre><a i=0>a</a><a i=2>b</a></pre>"), false, "numbers 0 and 2");
+  assert.equal(validStructure(source, "<pre>a b</pre>"), false, "balises perdues");
+  assert.equal(validStructure("<pre>Un seul morceau</pre>", "<pre>Un seul</pre>"), true, "simple block: nothing to check");
+  assert.deepEqual(extractPieces(source), ["A", "B"]);
 });
 
-test("budget de jetons : les requêtes qui dépasseraient la minute attendent au lieu d'être refusées (aucune erreur 429)", async () => {
-  twpLlm._test.configurerBudget({ fenetreMs: 600, limite: 700 });
+test("token budget: requests that would exceed the minute wait instead of being refused (no 429 error)", async () => {
+  twpLlm._test.configureBudget({ windowMs: 600, limit: 700 });
   try {
-    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-budget" });
-    const texte = "<pre>" + "mot ".repeat(150) + "</pre>"; // ~ 600 caractères : plus de 500 jetons estimés, deux requêtes ne tiennent pas dans 700
-    const cout = twpLlm._test.estimerJetons([{ content: "x".repeat(150) }, { content: JSON.stringify([texte]) }], "m-budget");
-    assert.ok(cout > 350 && cout < 700, "estimation plausible : " + cout);
-    const appels = fauxFetch([1, 2, 3].map(() => ({ content: '{"translations":["ok"]}' })));
+    const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-budget" });
+    const text = "<pre>" + "mot ".repeat(150) + "</pre>"; // ~ 600 characters: more than 500 estimated tokens, two requests do not fit in 700
+    const cost = twpLlm._test.estimateTokens([{ content: "x".repeat(150) }, { content: JSON.stringify([text]) }], "m-budget");
+    assert.ok(cost > 350 && cost < 700, "estimation plausible : " + cost);
+    const calls = fakeFetch([1, 2, 3].map(() => ({ content: '{"translations":["ok"]}' })));
     const t0 = Date.now();
-    await Promise.all([1, 2, 3].map(() => service.makeRequest("en", "fr", [{ originalText: texte }])));
-    assert.equal(appels.length, 3, "toutes les requêtes ont fini par partir");
-    assert.ok(Date.now() - t0 >= 1000, "elles ont été étalées sur la fenêtre (pas envoyées d'un coup) : " + (Date.now() - t0) + " ms");
+    await Promise.all([1, 2, 3].map(() => service.makeRequest("en", "fr", [{ originalText: text }])));
+    assert.equal(calls.length, 3, "all the requests eventually went out");
+    assert.ok(Date.now() - t0 >= 1000, "they were spread over the window (not sent all at once): " + (Date.now() - t0) + " ms");
   } finally {
-    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+    twpLlm._test.configureBudget({ windowMs: 60000, limit: 1e9 });
   }
 });
 
-test("budget de jetons : la limite réelle annoncée par le fournisseur est lue dans les en-têtes", async () => {
-  twpLlm._test.configurerBudget({ limite: 6000 });
+test("token budget: the real limit announced by the provider is read from the headers", async () => {
+  twpLlm._test.configureBudget({ limit: 6000 });
   try {
-    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-entetes" });
+    const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-entetes" });
     global.fetch = async (url, init) => ({
       ok: true, status: 200,
       headers: { get: (n) => (n === "x-ratelimit-limit-tokens" ? "12000" : null) },
       json: async () => ({ choices: [{ message: { content: '{"translations":["ok"]}' } }], usage: { total_tokens: 321 } }),
     });
     await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
-    assert.equal(twpLlm._test.budget.limite, 10200, "85 % de 12 000 jetons par minute");
-    assert.equal(twpLlm._test.budget.depenses.at(-1).jetons, 321, "la consommation réelle remplace l'estimation");
+    assert.equal(twpLlm._test.budget.limit, 10200, "85 % of 12,000 tokens per minute");
+    assert.equal(twpLlm._test.budget.spends.at(-1).tokens, 321, "the real consumption replaces the estimate");
   } finally {
-    twpLlm._test.configurerBudget({ limite: 1e9 });
+    twpLlm._test.configureBudget({ limit: 1e9 });
   }
 });
 
-test("erreur 429 de quelques secondes : l'extension attend puis réussit, sans abandonner ni se replier sur Google", async () => {
-  twpLlm._test.configurerBudget({ limite: 1e9 });
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-429" });
-  const appels = fauxFetch([{ status: 429, retryAfter: "1" }, { content: '{"translations":["fini"]}' }]);
+test("429 error of a few seconds: the extension waits then succeeds, without giving up or falling back to Google", async () => {
+  twpLlm._test.configureBudget({ limit: 1e9 });
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-429" });
+  const calls = fakeFetch([{ status: 429, retryAfter: "1" }, { content: '{"translations":["done"]}' }]);
   const t0 = Date.now();
-  const rep = await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
-  assert.deepEqual(rep, ["fini"]);
-  assert.equal(appels.length, 2);
-  assert.ok(Date.now() - t0 >= 900, "elle a attendu le délai indiqué (1 s)");
-  twpLlm._test.configurerBudget({ limite: 1e9 });
+  const result = await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
+  assert.deepEqual(result, ["done"]);
+  assert.equal(calls.length, 2);
+  assert.ok(Date.now() - t0 >= 900, "it waited the indicated delay (1 s)");
+  twpLlm._test.configureBudget({ limit: 1e9 });
 });
 
-test("la consigne envoyée à chaque requête est courte (moins de jetons gaspillés)", async () => {
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-court" });
-  const appels = fauxFetch([{ content: '{"translations":["ok"]}' }]);
+test("the instruction sent with each request is short (fewer wasted tokens)", async () => {
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-short" });
+  const calls = fakeFetch([{ content: '{"translations":["ok"]}' }]);
   await service.makeRequest("en", "fr", [{ originalText: "<pre>x</pre>" }]);
-  assert.ok(appels[0].corps.messages[0].content.length < 520, "consigne : " + appels[0].corps.messages[0].content.length + " caractères");
-  assert.match(appels[0].corps.messages[0].content, /already in French/);
+  assert.ok(calls[0].body.messages[0].content.length < 520, "instruction: " + calls[0].body.messages[0].content.length + " characters");
+  assert.match(calls[0].body.messages[0].content, /already in French/);
 });
 
-test("limite longue (quota du jour) : les requêtes suivantes échouent tout de suite au lieu d'attendre toutes plusieurs dizaines de secondes", async () => {
-  twpLlm._test.configurerBudget({ limite: 1e9 });
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-quota" });
-  const appels = fauxFetch([{ status: 429, retryAfter: "600" }]);
+test("long limit (daily quota): the following requests fail right away instead of all waiting tens of seconds", async () => {
+  twpLlm._test.configureBudget({ limit: 1e9 });
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-quota" });
+  const calls = fakeFetch([{ status: 429, retryAfter: "600" }]);
   await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>a</pre>" }]), /rate limited/);
   const t0 = Date.now();
   await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: "<pre>b</pre>" }]), /rate limited/);
-  assert.ok(Date.now() - t0 < 300, "échec immédiat");
-  assert.equal(appels.length, 1, "aucune requête envoyée pendant le blocage");
-  twpLlm._test.configurerBudget({ limite: 1e9 });
+  assert.ok(Date.now() - t0 < 300, "immediate failure");
+  assert.equal(calls.length, 1, "no request sent during the block");
+  twpLlm._test.configureBudget({ limit: 1e9 });
 });
 
-test("priorité : une requête du reste de la page (low) cède la place à une requête de ce qui est visible (high)", async () => {
-  twpLlm._test.configurerBudget({ fenetreMs: 400, limite: 700 }); // une seule requête de ~560 jetons par fenêtre
+test("priority: a request for the rest of the page (low) yields to a request for what is visible (high)", async () => {
+  twpLlm._test.configureBudget({ windowMs: 400, limit: 700 }); // a single request of ~560 tokens per window
   try {
-    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-priorite" });
-    const bloc = (marque) => "<pre>" + marque + " " + "mot ".repeat(150) + "</pre>";
-    const appels = fauxFetch(["A", "B", "C", "D"].map(() => ({ content: '{"translations":["ok"]}' })));
-    const envoyer = (marque, priorite) => service.makeRequest("en", "fr", [{ originalText: bloc(marque) }], { priority: priorite });
-    const a = envoyer("A", "high"); // part tout de suite
-    await attendre(20);
-    const suite = [envoyer("B", "low"), envoyer("C", "low")]; // arrivent AVANT D mais attendent
-    await attendre(20);
-    const d = envoyer("D", "high"); // arrive en dernier mais passe devant B et C
-    await Promise.all([a, d, ...suite]);
-    const ordre = appels.map((x) => JSON.parse(x.corps.messages[1].content)[0].slice(5, 6));
-    // B et C (fond de page) attendent en parallèle : leur ordre entre eux n'est pas garanti, seul compte que D passe devant.
-    assert.deepEqual(ordre.slice(0, 2), ["A", "D"], "ce qui est visible passe devant le reste de la page : " + ordre.join(""));
-    assert.deepEqual(ordre.slice(2).sort(), ["B", "C"]);
+    const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-priorite" });
+    const block = (marque) => "<pre>" + marque + " " + "mot ".repeat(150) + "</pre>";
+    const calls = fakeFetch(["A", "B", "C", "D"].map(() => ({ content: '{"translations":["ok"]}' })));
+    const send = (marque, priorite) => service.makeRequest("en", "fr", [{ originalText: block(marque) }], { priority: priorite });
+    const a = send("A", "high"); // part tout de waiting
+    await wait(20);
+    const waiting = [send("B", "low"), send("C", "low")]; // arrivent AVANT D mais attendent
+    await wait(20);
+    const d = send("D", "high"); // arrives last but goes ahead of B and C
+    await Promise.all([a, d, ...waiting]);
+    const order = calls.map((x) => JSON.parse(x.body.messages[1].content)[0].slice(5, 6));
+    // B and C (background) wait in parallel: their order between them is not guaranteed, all that matters is that D goes ahead.
+    assert.deepEqual(order.slice(0, 2), ["A", "D"], "what is visible goes ahead of the rest of the page: " + order.join(""));
+    assert.deepEqual(order.slice(2).sort(), ["B", "C"]);
   } finally {
-    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+    twpLlm._test.configureBudget({ windowMs: 60000, limit: 1e9 });
   }
 });
 
-test("priorité : sans concurrence, une requête du reste de la page part normalement (rien n'est ignoré)", async () => {
-  twpLlm._test.configurerBudget({ limite: 1e9 });
-  const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-fond" });
-  const appels = fauxFetch([{ content: '{"translations":["un"]}' }]);
+test("priority: without competition, a request for the rest of the page goes out normally (nothing is ignored)", async () => {
+  twpLlm._test.configureBudget({ limit: 1e9 });
+  const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-fond" });
+  const calls = fakeFetch([{ content: '{"translations":["un"]}' }]);
   assert.deepEqual(await service.makeRequest("en", "fr", [{ originalText: "<pre>one</pre>" }], { priority: "low" }), ["un"]);
-  assert.equal(appels.length, 1);
+  assert.equal(calls.length, 1);
 });
 
-test("budget saturé : une requête qui attendrait trop longtemps échoue tout de suite (repli sur Google) au lieu de patienter", async () => {
-  twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 700 });
+test("saturated budget: a request that would wait too long fails right away (fallback to Google) instead of waiting", async () => {
+  twpLlm._test.configureBudget({ windowMs: 60000, limit: 700 });
   try {
-    const service = twpLlm.create(FauxService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-saturé" });
-    const texte = "<pre>" + "mot ".repeat(150) + "</pre>";
-    const appels = fauxFetch([{ content: '{"translations":["ok"]}' }]);
-    await service.makeRequest("en", "fr", [{ originalText: texte }]); // la première passe et remplit le budget
+    const service = twpLlm.create(FakeService, Utils, { apiKey: "gsk_1234567890abcdef", model: "m-saturated" });
+    const text = "<pre>" + "mot ".repeat(150) + "</pre>";
+    const calls = fakeFetch([{ content: '{"translations":["ok"]}' }]);
+    await service.makeRequest("en", "fr", [{ originalText: text }]); // the first one goes through and fills the budget
     const t0 = Date.now();
-    await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: texte }], { priority: "low" }), /budget saturated/);
-    assert.ok(Date.now() - t0 < 500, "échec immédiat : " + (Date.now() - t0) + " ms");
-    assert.equal(appels.length, 1, "aucune requête de plus envoyée à Groq");
+    await assert.rejects(() => service.makeRequest("en", "fr", [{ originalText: text }], { priority: "low" }), /budget saturated/);
+    assert.ok(Date.now() - t0 < 500, "immediate failure: " + (Date.now() - t0) + " ms");
+    assert.equal(calls.length, 1, "no further request sent to Groq");
   } finally {
-    twpLlm._test.configurerBudget({ fenetreMs: 60000, limite: 1e9 });
+    twpLlm._test.configureBudget({ windowMs: 60000, limit: 1e9 });
   }
 });

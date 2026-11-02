@@ -1,8 +1,8 @@
-// Panneau de traduction ouvert depuis le menu du clic droit :
-//   « Translate selection »          -> traduit le texte sélectionné (lecture seule)
-//   « Translate what I'm writing »   -> traduit le contenu du champ de saisie, en direct pendant qu'on écrit ;
-//                                       « Replace » remplace le texte du champ (ou la partie sélectionnée)
-// Zéro réglage : source détectée, langue cible = la dernière choisie, IA (Groq) si une clé est enregistrée.
+// Translation panel opened from the right-click menu:
+//   "Translate selection"          -> translates the selected text (read only)
+//   "Translate what I'm writing"   -> translates the content of the input field, live while typing;
+//                                       "Replace" replaces the field's text (or the selected part)
+// Zero configuration: source detected, target language = the last one chosen, AI (Groq) if a key is saved.
 (function () {
   "use strict";
   if (window.__twpPanel) return;
@@ -10,13 +10,13 @@
 
   const DELAY_MS = 500;
 
-  let field = null; // dernier champ de saisie rencontré
-  // Sélection faite dans un champ au moment où le panneau s'ouvre (elle peut disparaître quand on clique dans le panneau).
+  let field = null; // last input field encountered
+  // Selection made in a field at the moment the panel opens (it can disappear when clicking in the panel).
   let savedSelectionText = "";
   let savedSelStart = null;
   let savedSelEnd = null;
   let savedRange = null;
-  let lastPointer = null; // dernière position de la souris (pour placer la bulle près de la sélection d'un champ)
+  let lastPointer = null; // last mouse position (to place the bubble near a selection made in a field)
   let mode = null; // "selection" | "field"
   let selectionText = "";
   let host = null;
@@ -36,7 +36,7 @@
     }
     return false;
   }
-  // Pour un éditeur riche, l'élément contenteditable le plus externe.
+  // For a rich editor, the outermost contenteditable element.
   function editableRoot(el) {
     if (el && el.isContentEditable) {
       let root = el;
@@ -48,7 +48,7 @@
   const isFormField = (el) => el.tagName === "TEXTAREA" || el.tagName === "INPUT";
   const getText = (el) => (isFormField(el) ? el.value : el.innerText);
 
-  // Partie sélectionnée dans le champ, si elle existe.
+  // Selected part of the field, if there is one.
   function fieldSelection(el) {
     if (isFormField(el)) {
       const a = el.selectionStart;
@@ -65,7 +65,7 @@
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  // Retourne false si la partie à remplacer n'a pas pu être retrouvée (le texte a changé entre-temps).
+  // Returns false if the part to replace could not be found again (the text changed in the meantime).
   function replaceInField(el, text, onlySelection) {
     el.focus();
     if (isFormField(el)) {
@@ -76,7 +76,7 @@
       let a = el.selectionStart;
       let b = el.selectionEnd;
       if (!(b > a)) {
-        // Sélection perdue : on la retrouve grâce aux positions mémorisées, si le texte est toujours le même.
+        // Selection lost: find it again using the remembered positions, if the text is still the same.
         if (savedSelStart !== null && el.value.slice(savedSelStart, savedSelEnd).trim() === savedSelectionText) {
           a = savedSelStart;
           b = savedSelEnd;
@@ -112,7 +112,7 @@
     }
   }
 
-  // ---- interface (shadow DOM : isolée des styles de la page) ----
+  // ---- interface (shadow DOM: isolated from the page's styles) ----
   const CSS = `
     :host { all: initial; }
     * { box-sizing: border-box; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -164,17 +164,17 @@
       close: root.querySelector(".close"),
     };
     twpLang.fillLanguageSelect(ui.lang);
-    // La langue cible est la même partout (menu, page, fenêtre de message) : celle de twpConfig.
+    // The target language is the same everywhere (menu, page, message window): the one in twpConfig.
     const ui2 = twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
     ui.lang.value = currentLanguage() || ui2;
     if (!ui.lang.value) ui.lang.value = "en";
 
-    // Un clic dans le panneau ne doit pas faire perdre sa sélection ou son curseur au champ de la page.
+    // A click in the panel must not make the page's field lose its selection or cursor.
     ui.panel.addEventListener("mousedown", (e) => {
       if (e.target.tagName !== "SELECT") e.preventDefault();
     });
     ui.lang.addEventListener("change", () => {
-      // Texte écrit : on change la langue d'écriture ; texte lu : la langue de lecture. Les deux sont indépendantes.
+      // Written text: the writing language is changed; read text: the reading language. The two are independent.
       if (mode === "field") {
         twpConfig.set("writeLanguage", ui.lang.value);
       } else {
@@ -221,7 +221,7 @@
     return { text: selectionText, scope: "selection" };
   }
 
-  let anchorOverride = null; // emplacement du texte sélectionné au moment du clic sur la bulle
+  let anchorOverride = null; // location of the selected text at the moment of the click on the bubble
 
   function anchorRect() {
     if (anchorOverride && (mode === "selection" || mode === "field")) return anchorOverride;
@@ -249,7 +249,7 @@
     }
   }
 
-  // Texte écrit (champ de saisie) = langue d'écriture ; texte affiché (page, sélection) = langue de lecture.
+  // Written text (input field) = writing language; displayed text (page, selection) = reading language.
   const languageKey = () => (mode === "field" ? "writeLanguage" : "targetLanguage");
   const currentLanguage = () => twpConfig.get(languageKey());
 
@@ -281,8 +281,8 @@
     });
   }
 
-  // Traductions déjà obtenues (langue cible + texte) : refermer puis rouvrir la bulle sur le même texte ne rappelle pas l'IA.
-  // Le bouton « Translate again » ignore cette mémoire. Les échecs ne sont jamais gardés.
+  // Translations already obtained (target language + text): closing then reopening the bubble on the same text does not call the AI again.
+  // The "Translate again" button ignores this memory. Failures are never kept.
   const memory = new Map();
   const MEMORY_MAX = 200;
   function remember(key, value) {
@@ -316,7 +316,7 @@
     setStatus("Translating...");
     let r = await ask({ action: "llmLive", text, sourceLanguage: "auto", targetLanguage: target });
     if (!r || !r.ok) {
-      // Pas de clé IA, ou échec de l'IA : traducteur gratuit d'origine.
+      // No AI key, or the AI failed: original free translator.
       const f = await ask({ action: "translateSingleText", translationService: "google", sourceLanguage: "auto", targetLanguage: target, source: text });
       r = typeof f === "string" ? { ok: true, text: f, free: true } : { ok: false };
     }
@@ -340,7 +340,7 @@
     }
   });
 
-  // ---- volet collé au bord droit (fenêtre de message et réglages) ----
+  // ---- panel docked to the right edge (message window and settings) ----
   let dock = null; // { host, frame, readyTimer }
   const DOCK_WIDTH_KEY = "twpDockWidth";
 
@@ -379,7 +379,7 @@
     frame.src = chrome.runtime.getURL(page + "?dock=1");
     root.querySelector(".x").addEventListener("click", closeDock);
 
-    // Redimensionnement à la souris ; la largeur choisie est mémorisée.
+    // Resizing with the mouse; the chosen width is remembered.
     root.querySelector(".grip").addEventListener("mousedown", (down) => {
       down.preventDefault();
       frame.style.pointerEvents = "none";
@@ -399,7 +399,7 @@
 
     document.documentElement.appendChild(host);
     dock = { host, frame, view, readyTimer: null };
-    // Si la page interdit d'afficher le volet (en-têtes de sécurité), il ne dira jamais « prêt » : fenêtre séparée.
+    // If the page forbids showing the panel (security headers), it will never say "ready": separate window.
     dock.readyTimer = setTimeout(() => {
       closeDock();
       try { chrome.runtime.sendMessage({ action: "twpFallbackWindow", view }); } catch (e) {}
@@ -407,7 +407,7 @@
     return true;
   }
 
-  // Messages venant du volet (la page du volet est dans un cadre d'une autre origine).
+  // Messages coming from the panel (the panel's page is in a frame of another origin).
   window.addEventListener("message", (e) => {
     if (!dock || e.source !== dock.frame.contentWindow || !e.data || typeof e.data !== "object") return;
     if (e.data.twp === "ready") {
@@ -424,7 +424,7 @@
     }
   });
 
-  // ---- bulle sur le texte sélectionné : un clic ouvre le volet avec la traduction ----
+  // ---- bubble on the selected text: a click opens the panel with the translation ----
   let bubble = null; // { host, el, timer }
   const BUBBLE_MIN_CHARS = 2;
   const BUBBLE_MAX_CHARS = 5000;
@@ -436,7 +436,7 @@
     bubble = null;
   }
 
-  // Rectangle près de la souris si elle est sur le champ (sélection faite à la souris), sinon le champ lui-même.
+  // Rectangle near the mouse if it is over the field (selection made with the mouse), otherwise the field itself.
   function rectNearPointer(el) {
     const r = el.getBoundingClientRect();
     if (lastPointer && lastPointer.x >= r.left && lastPointer.x <= r.right && lastPointer.y >= r.top && lastPointer.y <= r.bottom) {
@@ -445,9 +445,9 @@
     return { left: r.left, right: r.left + 1, top: r.bottom - 20, bottom: r.bottom };
   }
 
-  // Ce qui est sélectionné et où : { text, rect, field, start, end } ou null.
+  // What is selected and where: { text, rect, field, start, end } or null.
   function readSelection() {
-    // Dans un champ de saisie (input, textarea) le navigateur n'expose pas la sélection par window.getSelection().
+    // In an input field (input, textarea) the browser does not expose the selection through window.getSelection().
     const active = editableRoot(document.activeElement);
     if (active && isFormField(active) && isEditable(active)) {
       const a = active.selectionStart;
@@ -460,7 +460,7 @@
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const anchor = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
-    // Pas dans nos propres panneaux ; pas dans un champ de mot de passe.
+    // Not in our own panels; not in a password field.
     if (anchor && anchor.closest && (anchor.closest("[data-twp-panel],[data-twp-dock],[data-twp-bubble]") || anchor.closest("input[type=password]"))) return null;
     const text = sel.toString().trim();
     if (text.length < BUBBLE_MIN_CHARS) return null;
@@ -472,7 +472,7 @@
     return {
       text: text.slice(0, BUBBLE_MAX_CHARS),
       rect: { left: last.left, right: last.right, top: last.top, bottom: last.bottom },
-      field: root && isEditable(root) ? root : null, // texte sélectionné dans un éditeur riche (Teams, Outlook web...)
+      field: root && isEditable(root) ? root : null, // text selected in a rich editor (Teams, Outlook web...)
       start: null,
       end: null,
     };
@@ -495,14 +495,14 @@
         button:hover { background: #0353e9; }
       </style><button title="Translate the selection" aria-label="Translate the selection">A</button>`;
       const el = root.querySelector("button");
-      // La sélection doit survivre au clic sur la bulle.
+      // The selection must survive the click on the bubble.
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {
-        // Le petit panneau s'ouvre juste sous le texte sélectionné (le bouton « Window » ouvre le volet de la page).
+        // The small panel opens just below the selected text (the "Window" button opens the page's docked panel).
         const info = readSelection() || bubble.info;
         anchorOverride = bubble.anchor || null;
         if (info.field) {
-          // Texte écrit par l'utilisateur : on traduit la sélection et « Replace » la remplace (comme DeepL).
+          // Text written by the user: the selection is translated and "Replace" replaces it (like DeepL).
           mode = "field";
           field = info.field;
           savedSelectionText = info.text;
@@ -531,7 +531,7 @@
     bubble.timer = setTimeout(hideBubble, 8000); // la bulle s'efface toute seule
   }
 
-  // On attend la fin du geste (souris relâchée ou touche relâchée) avant d'afficher la bulle.
+  // Wait for the end of the gesture (mouse released or key released) before showing the bubble.
   document.addEventListener("mouseup", (e) => {
     if (e.composedPath().some((n) => n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-twp-bubble"))) return;
     setTimeout(showBubble, 10);
@@ -545,12 +545,12 @@
   document.addEventListener("selectionchange", () => {
     if (bubble && !readSelection()) hideBubble();
   });
-  // Position de la souris : la bulle se place près de la sélection faite dans un champ.
+  // Mouse position: the bubble is placed near a selection made in a field.
   document.addEventListener("mouseup", (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
   window.addEventListener("scroll", () => hideBubble(), true);
 
-  // ---- événements ----
-  // Le champ visé est celui sur lequel on fait le clic droit (ou qui avait le focus).
+  // ---- events ----
+  // The target field is the one that was right-clicked (or had the focus).
   document.addEventListener(
     "contextmenu",
     (e) => {
@@ -567,7 +567,7 @@
     },
     true
   );
-  // Pendant que le panneau est ouvert sur un champ, la traduction suit ce qu'on écrit.
+  // While the panel is open on a field, the translation follows what is being typed.
   document.addEventListener(
     "input",
     (e) => {
@@ -593,7 +593,7 @@
     true
   );
   window.addEventListener("scroll", () => {
-    anchorOverride = null; // après un défilement, on se recale sur la sélection actuelle
+    anchorOverride = null; // after scrolling, realign on the current selection
     place();
   }, true);
   window.addEventListener("resize", place);
@@ -610,15 +610,15 @@
       if (mode === "field") {
         const active = editableRoot(document.activeElement);
         if (!field || !document.contains(field)) field = isEditable(active) ? active : null;
-        if (!field) mode = "selection"; // pas de champ trouvé : on traduit la sélection s'il y en a une
+        if (!field) mode = "selection"; // no field found: translate the selection if there is one
       }
       show(true);
     } else if (request.action === "twpDock") {
       sendResponse(openDockPanel(request.view));
     } else if (request.action === "twpInsertText") {
-      // Insertion demandée par la fenêtre de message (« Insert in the page »).
+      // Insertion requested by the message window ("Insert in the page").
       const el = field && document.contains(field) ? field : null;
-      if (!el) return; // un autre cadre de la page répondra
+      if (!el) return; // another frame of the page will answer
       insertAtCaret(el, request.text);
       sendResponse(true);
     }

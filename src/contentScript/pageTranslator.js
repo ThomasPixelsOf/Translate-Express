@@ -327,7 +327,7 @@ function getTabHostName() {
 
 Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   const tabHostName = _[1];
-  // "sup" não será traduzido https://github.com/FilipePS/Traduzir-paginas-web/issues/647
+  // "sup" will not be translated https://github.com/FilipePS/Traduzir-paginas-web/issues/647
   /* prettier-ignore */
   const htmlTagsInlineText = ["#text", "a", "abbr", "acronym", "b", "bdo", "big", "cite", "dfn", "em", "i", "label", "q", "s", "small", "span", "strong", "sub", /*"sup",*/ "u", "tt", "var"];
   /* prettier-ignore */
@@ -375,14 +375,14 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
         dontSortResults = newvalue == "yes" ? true : false;
         break;
       case "pageTranslatorService":
-        // Clé Groq enregistrée ou retirée pendant que la page est ouverte : on suit tout de suite.
+        // Groq key saved or removed while the page is open: follow it right away.
         currentPageTranslatorService = newvalue;
         break;
     }
   });
 
-  // (Retiré : le code d'origine remettait ici la langue cible sur la première langue du navigateur à CHAQUE chargement de
-  // page, ce qui annulait le choix de l'utilisateur. La langue cible n'est modifiée que par l'utilisateur.)
+  // (Removed: the original code reset the target language here to the browser's first language on EVERY page load,
+  // which cancelled the user's choice. The target language is only changed by the user.)
 
   // Pieces are a set of nodes separated by inline tags that form a sentence or paragraph.
   let piecesToTranslate = [];
@@ -409,10 +409,10 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   let nodesToRestore = [];
 
   // ================= Diagnostic : journal, rapport de page, garde-fou =================
-  // Le journal part vers le service worker par petits paquets (voir background/diagnostics.js) ; le tableau de bord l'affiche.
+  // The log goes to the service worker in small packets (see background/diagnostics.js); the dashboard displays it.
   const diagEvents = [];
   let diagTimer = null;
-  let translatedNodesCount = 0; // nœuds texte que nous avons traduits dans cette page
+  let translatedNodesCount = 0; // text nodes we translated in this page
 
   function diagLog(type, data) {
     try {
@@ -421,7 +421,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       if (diagEvents.length > 100) diagEvents.shift();
       if (!diagTimer) diagTimer = setTimeout(diagFlush, 1000);
     } catch (e) {
-      /* le journal ne doit jamais gêner la traduction */
+      /* the log must never get in the way of translation */
     }
   }
   function diagFlush() {
@@ -431,11 +431,11 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     try {
       chrome.runtime.sendMessage({ action: "twpLog", entries }, () => void chrome.runtime.lastError);
     } catch (e) {
-      /* extension rechargée : on ignore */
+      /* extension reloaded: ignore */
     }
   }
 
-  const stuckMs = () => Number(twpConfig.get("diagStuckMs")) || 90000; // un envoi sans réponse au-delà est considéré bloqué
+  const stuckMs = () => Number(twpConfig.get("diagStuckMs")) || 90000; // a send without an answer beyond this is considered stuck
 
   function elementPath(el) {
     const parts = [];
@@ -448,7 +448,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     return parts.join(" > ");
   }
 
-  // Pourquoi ce texte n'est volontairement pas traduit (null = rien ne l'en empêche). Reprend les règles de lecture de la page.
+  // Why this text is deliberately not translated (null = nothing prevents it). Follows the page's reading rules.
   function excludedReason(node) {
     for (let el = node.parentElement; el; el = el.parentElement) {
       const name = el.nodeName.toLowerCase();
@@ -461,7 +461,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     return null;
   }
 
-  // Rapport détaillé de l'état de la page : pour chaque texte pas encore traduit, la raison.
+  // Detailed report of the page state: for each text not yet translated, the reason.
   function buildPageReport() {
     const now = Date.now();
     const nodes = [];
@@ -480,7 +480,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
     const pieceOf = new Map();
     piecesToTranslate.forEach((ptt) => ptt.nodes.forEach((nd) => pieceOf.set(nd, ptt)));
-    // Texte original de chaque nœud écrit : permet de repérer ce qui a été « traduit » en gardant le même texte.
+    // Original text of each written node: lets us spot what was "translated" while keeping the same text.
     const originalOf = new Map();
     for (const ntr of nodesToRestore) {
       const written = ntr.node.nodeType === 3 ? ntr.node : ntr.node.firstChild;
@@ -563,8 +563,8 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     };
   }
 
-  // Garde-fou : tout ce qui est parti sans réponse depuis trop longtemps est remis dans la file, les compteurs bloqués sont remis
-  // à zéro, et un blocage est consigné avec son état.
+  // Guard: everything that was sent without an answer for too long is put back in the queue, stuck counters are reset
+  // to zero, and a stall is logged with its state.
   let watchdogTimerHandler;
   let lastSentAt = 0;
   let lastProgressKey = "";
@@ -592,7 +592,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     const exhausted = piecesToTranslate.filter((x) => !x.isTranslated && (x.retries || 0) > MAX_PIECE_RETRIES).length;
     if (pending > 0 && highInFlight === 0 && !lowInFlight && lastSentAt && now - lastSentAt > 20000) {
       diagLog("guard.stall", { pending, exhausted, waitingRetry: piecesToTranslate.filter((x) => !x.isTranslated && x.retryAt > now).length });
-      lastHighSentAt = 0; // le travail de fond reprend sans attendre
+      lastHighSentAt = 0; // background work resumes without waiting
     }
     const key = [piecesToTranslate.length, pending, inFlight, exhausted, translatedNodesCount].join("/");
     if (key !== lastProgressKey) {
@@ -615,10 +615,10 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   });
 
-  // Textes déjà pris en charge (collectés, ou écrits par nous). Sert à repérer ceux qui ont échappé à la traduction :
-  // texte ajouté après coup, texte modifié par la page, texte dans une zone isolée (shadow DOM)...
+  // Texts already handled (collected, or written by us). Used to spot those that escaped translation:
+  // text added later, text modified by the page, text in an isolated area (shadow DOM)...
   let seenTextNodes = new WeakSet();
-  const writtenText = new WeakMap(); // nœud texte -> texte que NOUS y avons écrit (pour ne pas confondre avec un changement de la page)
+  const writtenText = new WeakMap(); // text node -> text that WE wrote in it (so it is not mistaken for a change by the page)
 
   function markSeen(node) {
     if (!node) return;
@@ -628,7 +628,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
-  // Ajoute à la file seulement les nœuds texte jamais vus ; retourne le nombre de morceaux ajoutés.
+  // Adds to the queue only text nodes never seen; returns the number of pieces added.
   function adoptPieces(newPieces) {
     let added = 0;
     for (const piece of newPieces) {
@@ -657,7 +657,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
-  // Balayage de sécurité : toutes les 4 s, on relit la page et on traduit ce qui a échappé à tous les autres mécanismes.
+  // Safety sweep: every 4 s, the page is read again and whatever escaped all the other mechanisms is translated.
   let sweepTimerHandler;
   function sweepForMissedText() {
     try {
@@ -679,7 +679,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
     mutations.forEach((mutation) => {
       if (mutation.type === "characterData") {
-        // Le texte d'un nœud existant a changé. Si ce n'est pas nous qui l'avons écrit, c'est la page : à retraduire.
+        // The text of an existing node changed. If we did not write it, the page did: translate it again.
         const target = mutation.target;
         if (writtenText.get(target) === target.nodeValue) return;
         seenTextNodes.delete(target);
@@ -694,7 +694,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
         if (htmlTagsInlineText.indexOf(nodeName) == -1) {
           if (htmlTagsInlineIgnore.indexOf(nodeName) == -1) enqueue(addedNode);
         } else if (addedNode.parentNode) {
-          // Texte ou élément en ligne ajouté : avant, il était ignoré. On repart de son parent.
+          // Text or inline element added: it used to be ignored. Start again from its parent.
           enqueue(addedNode.parentNode);
         }
       });
@@ -709,12 +709,12 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     });
   });
 
-  // Les zones isolées (shadow DOM ouvert) ne sont pas vues par l'observateur de la page : on les surveille une à une.
+  // Isolated areas (open shadow DOM) are not seen by the page observer: they are watched one by one.
   function observeShadowRoot(shadowRoot) {
     try {
       if (mutationObserverActive) mutationObserver.observe(shadowRoot, MUTATION_OPTIONS);
     } catch (e) {
-      /* zone fermée ou déjà observée */
+      /* closed area or already observed */
     }
   }
 
@@ -742,7 +742,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
   }
 
   let pageIsVisible = document.visibilityState == "visible";
-  // isto faz com que partes do youtube não sejam traduzidas
+  // this makes parts of YouTube not get translated
   // new IntersectionObserver(entries => {
   //         if (entries[0].isIntersecting && document.visibilityState == "visible") {
   //             pageIsVisible = true
@@ -803,8 +803,8 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
-  // Beaucoup d'applications affichent du texte normal (un courriel, des consignes) dans une balise <code> à chasse fixe.
-  // Du vrai code n'est pas traduit ; du texte qui ressemble à des phrases l'est.
+  // Many applications display normal text (an email, instructions) inside a fixed-width <code> tag.
+  // Real code is not translated; text that looks like sentences is.
   function isProseCode(el) {
     if (el.nodeName.toLowerCase() !== "code") return false;
     const text = el.textContent || "";
@@ -1086,16 +1086,16 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     return attributesToTranslate;
   }
 
-  // encapsular o texto faz com que do video suma
-  // ao utilizar função como Pai.removeChild(filho)
-  // pode ser gerado um erro ao encapsular
+  // encapsulating the text makes the video disappear
+  // when using a function like Parent.removeChild(child)
+  // an error may be generated when encapsulating
   function encapsulateTextNode(node) {
     const fontNode = document.createElement("font");
     fontNode.setAttribute("style", "vertical-align: inherit;");
     fontNode.textContent = node.textContent;
 
     node.replaceWith(fontNode);
-    markSeen(fontNode); // le texte qu'il contient est déjà pris en charge : ne pas le renvoyer comme « nouveau »
+    markSeen(fontNode); // the text it contains is already handled: do not send it again as "new"
 
     return fontNode;
   }
@@ -1136,12 +1136,12 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     if (writtenNode && writtenNode.nodeType === 3) writtenText.set(writtenNode, writtenNode.nodeValue);
   }
 
-  // Nombre de nouvelles tentatives d'un morceau dont la traduction a échoué (réponse absente ou vide).
-  const MAX_PIECE_RETRIES = 6; // délais : 2 s, 4 s, 8 s, 16 s, 30 s, 30 s (couvre une limite de débit d'une trentaine de secondes)
+  // Number of new attempts for a piece whose translation failed (missing or empty answer).
+  const MAX_PIECE_RETRIES = 6; // delays: 2 s, 4 s, 8 s, 16 s, 30 s, 30 s (covers a rate limit of about thirty seconds)
 
-  // Le code d'origine marquait un morceau « traduit » avant d'envoyer la demande : si la réponse échouait, le morceau
-  // restait en version originale pour toujours (une partie de la page traduite, le reste non). Maintenant un morceau
-  // sans réponse est remis dans la file et réessayé après un délai croissant.
+  // The original code marked a piece as "translated" before sending the request: if the answer failed, the piece
+  // stayed in its original version forever (part of the page translated, the rest not). Now a piece
+  // without an answer is put back in the queue and retried after an increasing delay.
   function scheduleRetryOfFailedPieces(piecesToTranslateNow, results) {
     piecesToTranslateNow.forEach((ptt, i) => {
       const r = Array.isArray(results) ? results[i] : null;
@@ -1158,13 +1158,13 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     });
   }
 
-  // Le moteur peut répondre pour une partie seulement des nœuds d'un morceau (réponse tronquée, balises perdues) : les nœuds
-  // restés sans traduction forment un nouveau morceau, réessayé après un court délai.
+  // The engine may answer for only some of a piece's nodes (truncated answer, lost tags): the nodes
+  // left without a translation form a new piece, retried after a short delay.
   function retryNodesWithoutTranslation(piecesToTranslateNow, results) {
     if (!Array.isArray(results)) return;
     piecesToTranslateNow.forEach((ptt, i) => {
       const r = results[i];
-      if (!Array.isArray(r) || !r.some((x) => typeof x === "string" && x.length > 0)) return; // échec total : déjà géré
+      if (!Array.isArray(r) || !r.some((x) => typeof x === "string" && x.length > 0)) return; // total failure: already handled
       const missing = ptt.nodes.filter((_, j) => !(typeof r[j] === "string" && r[j].length > 0));
       const tries = ptt.partialRetries || 0;
       if (missing.length === 0 || tries >= MAX_PIECE_RETRIES) return;
@@ -1183,7 +1183,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   function translateResults(piecesToTranslateNow, results) {
     if (!Array.isArray(results)) return;
-    results = results.map((r) => (Array.isArray(r) ? r : [])); // morceau sans réponse : ignoré, réessayé plus tard
+    results = results.map((r) => (Array.isArray(r) ? r : [])); // piece without an answer: ignored, retried later
     if (dontSortResults) {
       for (let i = 0; i < results.length; i++) {
         for (let j = 0; j < results[i].length; j++) {
@@ -1286,16 +1286,16 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
   }
 
-  // ---- Priorités : ce qui est visible d'abord, le reste de la page ensuite ----
-  // « high » : ce qui est à l'écran (et un peu en dessous) ; envoyé tout de suite, passe devant dans la file de l'IA.
-  // « low »  : tout le reste de la page (en dessous, au-dessus, masqué) ; traduit en tâche de fond, du plus proche de
-  //            l'écran au plus lointain, seulement quand rien de nouveau n'arrive à l'écran. Rien n'est ignoré :
-  //            la page finit entièrement traduite, même sans défiler.
+  // ---- Priorities: what is visible first, the rest of the page afterwards ----
+  // "high": what is on screen (and a little below); sent right away, goes ahead in the AI queue.
+  // "low":  all the rest of the page (below, above, hidden); translated in the background, from the closest to
+  //          the screen to the farthest, only when nothing new arrives on screen. Nothing is ignored:
+  //          the page ends up fully translated, even without scrolling.
   let highInFlight = 0;
   let lastHighSentAt = 0;
   let lowInFlight = false;
-  const LOW_IDLE_MS = 1200; // délai sans nouveauté à l'écran avant de s'occuper du reste
-  const LOW_BATCH_CHARS = 1500; // taille d'un lot de fond (un lot à la fois)
+  const LOW_IDLE_MS = 1200; // delay without anything new on screen before handling the rest
+  const LOW_BATCH_CHARS = 1500; // size of a background batch (one batch at a time)
 
   function sendPieces(piecesNow, priority, currentFooCount) {
     const tEnvoi = Date.now();
@@ -1346,18 +1346,18 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
       });
   }
 
-  // Distance d'un morceau à la zone visible (0 = visible, grand = loin ; masqué = en dernier).
+  // Distance of a piece from the visible area (0 = visible, large = far; hidden = last).
   function distanceToScreen(ptt) {
     const el = ptt.topElement || ptt.bottomElement;
     if (!el || !el.getBoundingClientRect) return 1e9;
     const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) return 1e9; // masqué (onglet inactif, display:none) : tout à la fin
+    if (r.width === 0 && r.height === 0) return 1e9; // hidden (inactive tab, display:none): at the very end
     if (r.top > window.innerHeight) return r.top - window.innerHeight;
     if (r.bottom < 0) return -r.bottom;
     return 0;
   }
 
-  // Le prochain lot du reste de la page : les morceaux non traduits les plus proches de l'écran.
+  // The next batch of the rest of the page: the untranslated pieces closest to the screen.
   function pickBackgroundPieces() {
     const now = Date.now();
     const candidates = piecesToTranslate
@@ -1381,12 +1381,12 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
         (function () {
           if (piecesToTranslate.length < 1) return;
           const innerHeight = window.innerHeight;
-          // On traduit aussi trois quarts d'écran sous la zone visible : le texte est déjà traduit quand on défile.
+          // Three quarters of a screen below the visible area are also translated: the text is already translated when scrolling.
           const margin = Math.round(innerHeight * 0.75);
           const now = Date.now();
 
-          // Un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé : on traduit tout morceau
-          // dont une partie, même petite, se trouve dans la zone visible (écran + marge).
+          // A piece taller than the screen (top above, bottom below) was never sent: any piece
+          // with a part, even a small one, inside the visible area (screen + margin) is translated.
           function overlapsScreen(ptt) {
             if (!ptt.topElement || !ptt.bottomElement) return false;
             const a = ptt.topElement.getBoundingClientRect();
@@ -1460,7 +1460,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
           if (piecesToTranslateNow.length > 0) {
             sendPieces(piecesToTranslateNow, "high", currentFooCount);
           } else if (highInFlight === 0 && !lowInFlight && Date.now() - lastHighSentAt > LOW_IDLE_MS) {
-            // Rien de nouveau à l'écran : on avance sur le reste de la page, du plus proche au plus lointain.
+            // Nothing new on screen: move on with the rest of the page, from the closest to the farthest.
             const backgroundPieces = pickBackgroundPieces();
             if (backgroundPieces.length > 0) sendPieces(backgroundPieces, "low", currentFooCount);
           }
@@ -1626,7 +1626,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     }
     nodesToRestore = [];
 
-    //TODO não restaurar atributos que foram modificados
+    //TODO do not restore attributes that were modified
     for (const ati of attributesToTranslate) {
       if (ati.isTranslated) {
         ati.node.setAttribute(ati.attrName, ati.original);
@@ -1666,7 +1666,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "translatePage") {
-      // Le menu précise le service à utiliser (IA si une clé est enregistrée, sinon Google).
+      // The menu specifies the service to use (AI if a key is saved, otherwise Google).
       if (request.service) currentPageTranslatorService = request.service;
       if (request.targetLanguage === "original") {
         pageTranslator.restorePage();

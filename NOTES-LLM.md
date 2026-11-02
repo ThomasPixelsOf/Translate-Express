@@ -1,142 +1,147 @@
-# Translate Express (version 1.0.0)
+# Translate Express (version 1.0.0): design notes
 
-Extension personnelle basée sur TWP (Translate Web Pages, branche `chrome-mv3` 10.2.5.0) ; numérotation de version propre : 1.0.0. Le nom « TWP » ne sert plus que pour désigner le code d'origine.
+A fork of TWP (Translate Web Pages, branch `chrome-mv3`, 10.2.5.0) with its own version numbering: 1.0.0. The name "TWP" now only designates the original code.
 
+Built on the `chrome-mv3` branch (version 10.2.5.0) of https://github.com/FilipePS/Traduzir-paginas-web. The first commit of this repository is the exact state of the original project; the following ones are our changes.
+The extension keeps only the essentials: no browser popup, no options page, no keyboard shortcuts, no floating button. Everything is done from the **right-click menu**.
 
-Bâtie sur la branche `chrome-mv3` (version 10.2.5.0) de https://github.com/FilipePS/Traduzir-paginas-web. Le premier commit de ce dépôt est l'état exact du projet d'origine ; les suivants sont nos modifications.
-L'extension ne garde que l'essentiel : pas de popup du navigateur, pas de page d'options, pas de raccourcis clavier, pas de bouton flottant. Tout se fait par le **menu du clic droit**.
+## The right-click menu
 
-## Le menu du clic droit
-
-| Où on clique | Entrée | Effet |
+| Where you click | Entry | Effect |
 |---|---|---|
-| quand on sélectionne du texte | une **bulle « A »** apparaît près de la sélection | un clic ouvre un petit panneau flottant juste sous le texte avec la traduction (Copy ; le bouton Window l'ouvre dans le volet de la page) ; case « Show a bubble when I select text » du menu pour couper la bulle (elle s'efface seule après 8 s) |
-| sur du texte sélectionné | **Translate selection** | un panneau s'ouvre près de la sélection avec la traduction (Copy) |
-| dans un champ de saisie | **Translate what I'm writing** | panneau avec la traduction en direct de ce qu'on écrit ; **Replace** remplace le texte du champ (ou la partie sélectionnée) |
-| sur la page | **Translate this page to ...** / **Show original page** | traduit toute la page, puis revient à l'original |
-| partout | **Message window (live translation)** | volet collé au bord droit de la page (largeur réglable à la souris, Échap ou × pour fermer) : on écrit, la traduction arrive en direct ; Copy (Ctrl+Entrée), Insert in the page, lien Settings. Une fenêtre séparée s'ouvre seulement si la page interdit le volet (page du navigateur, PDF, règles de sécurité du site) |
-| partout | **Read in: ...** | sous-menu : la langue dans laquelle on LIT (pages et texte affiché) ; 11 langues courantes, le français par défaut |
-| partout | **Write in: ...** | sous-menu : la langue dans laquelle on ÉCRIT (texte tapé, traduit pour le destinataire) ; l'anglais par défaut ; « More languages, Groq key... » ouvre la liste complète |
-| partout | page « Language and Groq key » (dans le même volet) | la liste de toutes les langues et le champ de la clé Groq (facultatif) |
+| when you select text | a **"A" bubble** appears near the selection | a click opens a small floating panel just below the text with the translation (Copy; the Window button opens it in the page's docked panel); the "Show a bubble when I select text" checkbox of the menu turns the bubble off (it disappears by itself after 8 s) |
+| on selected text | **Translate selection** | a panel opens near the selection with the translation (Copy) |
+| in an input field | **Translate what I'm writing** | panel with the live translation of what you write; **Replace** replaces the field's text (or the selected part) |
+| on the page | **Translate this page to ...** / **Show original page** | translates the whole page, then goes back to the original |
+| everywhere | **Message window (live translation)** | panel docked to the right edge of the page (width adjustable with the mouse, Escape or x to close): you write, the translation arrives live; Copy (Ctrl+Enter), Insert in the page, Settings link. A separate window only opens if the page forbids the panel (browser page, PDF, site security rules) |
+| everywhere | **Read in: ...** | submenu: the language you READ in (pages and displayed text); 11 common languages, French by default |
+| everywhere | **Write in: ...** | submenu: the language you WRITE in (typed text, translated for the recipient); English by default; "More languages, Groq key..." opens the full list |
+| everywhere | **Dashboard (diagnostics)** | popup window with the diagnostics (see below) |
+| everywhere | "Language and Groq key" page (in the same panel) | the list of all languages and the (optional) Groq key field |
 
-Zéro réglage : langue cible par défaut = le français, puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
+Zero configuration: the default target language is French, then the one you choose (it is never overwritten again, even after a restart), source detected. Without a key, the original free translator (Google) is used; with a Groq key, the AI translates (model chosen automatically; optional menu in "Groq key..."). If the AI fails, the panel falls back to the free one.
 
-## Priorités : le visible d'abord, le reste ensuite (rien n'est ignoré)
+## Priorities: what is visible first, the rest afterwards (nothing is ignored)
 
-Deux niveaux de priorité, de la page jusqu'à la file d'attente de l'IA :
+Two priority levels, from the page down to the AI queue:
 
-- **Haute** : ce qui est à l'écran et trois quarts d'écran en dessous. Envoyé tout de suite ; quand on défile, un texte qui devient visible passe aussitôt en haute priorité.
-- **Basse** : tout le reste de la page (en dessous, au-dessus, masqué dans un onglet inactif). Traduit en tâche de fond par lots de 1 500 caractères, du plus proche de l'écran au plus lointain, le masqué en dernier, seulement quand rien de nouveau n'arrive à l'écran depuis 1,2 s et sans jamais retarder le visible : dans la file de l'IA, une requête de fond cède la place à toute requête visible en attente de budget. La page finit donc entièrement traduite, même sans défiler.
+- **High**: what is on screen and three quarters of a screen below. Sent right away; when scrolling, a text that becomes visible immediately gets high priority.
+- **Low**: all the rest of the page (below, above, hidden in an inactive tab). Translated in the background in batches of 1,500 characters, from the closest to the screen to the farthest, hidden last, only when nothing new has arrived on screen for 1.2 s and without ever delaying what is visible: in the AI queue, a background request yields to any visible request waiting for budget. The page therefore ends up fully translated, even without scrolling.
 
-Avant, le reste de la page n'était traduit que lorsqu'on défilait jusqu'à lui, et toutes les requêtes passaient dans l'ordre d'arrivée.
+Before, the rest of the page was only translated when scrolling to it, and all requests went through in order of arrival.
 
-## Limites de Groq : budget de jetons par minute
+## Groq limits: token budget per minute
 
-L'offre gratuite limite les jetons par minute (environ 8 000 pour gpt-oss-20b, plus pour d'autres modèles) et les requêtes par minute (30). Une page traduite d'un coup dépasse la limite : les requêtes sont refusées (erreur 429) et la page reste à moitié traduite. L'extension compte donc ce que chaque requête coûte (estimation, corrigée par la consommation réelle renvoyée par Groq), ne l'envoie que si la minute glissante a la place, et lit la limite réelle dans les en-têtes de réponse (85 % de la valeur annoncée ; 6 000 par prudence avant la première réponse). La page se traduit donc par vagues, sans erreur. Sur une erreur 429 de quelques secondes, l'extension attend le délai indiqué ; au-delà de 40 s (quota du jour), elle abandonne tout de suite et la page est traduite par Google. La consigne envoyée à chaque requête est courte, pour ne pas gaspiller de jetons.
+The free tier limits tokens per minute (about 8,000 for gpt-oss-20b, more for other models) and requests per minute (30). A page translated all at once exceeds the limit: requests are refused (429 error) and the page stays half translated. So the extension counts what each request costs (an estimate, corrected by the real consumption returned by Groq), only sends it if the sliding minute has room, and reads the real limit from the response headers (85 % of the announced value; 6,000 to be cautious before the first answer). The page is therefore translated in waves, without errors. On a 429 error of a few seconds, the extension waits for the indicated delay; beyond 40 s (daily quota), it gives up right away and the page is translated by Google. The instruction sent with each request is short, so as not to waste tokens.
 
-## Structure des blocs : début traduit, fin en anglais
+### Saturated token budget
 
-Un bloc de plusieurs morceaux est envoyé sous la forme `<a i=0>…</a><a i=1>…</a>`. Avant, seul le nombre de blocs était vérifié : si le modèle fusionnait ou oubliait un morceau, les suivants se décalaient ou restaient en anglais sans erreur. Maintenant chaque bloc est vérifié (nombre de morceaux et numéros 0 à n-1) et retraduit morceau par morceau s'il est faux ; côté page, les morceaux restés sans traduction dans un bloc répondu sont réessayés (jusqu'à 6 fois).
+If a request would have to wait more than 12 s (visible text) or 2.5 s (background text) for room in the token budget, it fails right away and the block goes to Google (event `llm.budget-skip`). The page's stall guard waits 90 s (`diagStuckMs`) so as not to send twice pieces that are simply waiting their turn.
 
-## Vitesse
+## Block structure: start translated, end in English
 
-TWP traduit d'abord ce qui est à l'écran, puis le reste en défilant. Côté IA : le modèle choisi automatiquement est un modèle rapide qui ne « réfléchit » pas avant de répondre (ordre de préférence : llama-3.3-70b-versatile, gpt-oss-20b, llama-3.1-8b-instant, puis les modèles raisonneurs) ; les modèles raisonneurs reçoivent le réglage qui coupe la réflexion (retiré tout seul si le fournisseur le refuse) ; lots de 1800 caractères traduits 4 par 4 en parallèle ; une réponse qui dépasse 20 s est réessayée ; une limite de débit annoncée à plus de 6 s fait abandonner tout de suite l'IA, et la page est traduite par Google au lieu d'attendre ; un lot dont la longueur ne correspond pas est coupé en deux moitiés traduites en parallèle. Le menu « Model » de la page de réglage permet de choisir un autre modèle.
+A block of several pieces is sent as `<a i=0>…</a><a i=1>…</a>`. Before, only the number of blocks was checked: if the model merged or forgot a piece, the following ones shifted or stayed in English without any error. Now every block is checked (number of pieces and numbers 0 to n-1) and translated again piece by piece if it is wrong; on the page side, pieces left untranslated in an answered block are retried (up to 6 times).
 
-## Plusieurs onglets
+## Speed
 
-L'état « page traduite ou non » est propre à chaque onglet : le titre de l'entrée du menu (« Translate this page to … » ou « Show original page ») est recalculé quand on change d'onglet ou de fenêtre, et un clic agit selon l'état de l'onglet cliqué. Une page qui se recharge redevient « à traduire ». L'état n'est jamais mémorisé dans le service worker : on le demande à l'onglet.
+TWP translates what is on screen first, then the rest while scrolling. On the AI side: the automatically chosen model is a fast one that does not "think" before answering (order of preference: llama-3.3-70b-versatile, gpt-oss-20b, llama-3.1-8b-instant, then reasoning models); reasoning models get the setting that turns off thinking (removed automatically if the provider refuses it); batches of 1,800 characters translated 4 at a time in parallel; an answer taking more than 20 s is retried; a rate limit announced at more than 6 s makes the AI give up immediately, and the page is translated by Google instead of waiting; a batch whose length does not match is split in two halves translated in parallel. The "Model" menu of the settings page lets you choose another model.
 
-## Rien ne doit rester non traduit : tous les cas de texte qui échappait
+## Several tabs
 
-Le traducteur d'origine laissait échapper du texte dans plusieurs situations, toutes couvertes maintenant (`pageTranslator.js`, tests dans `tests/page-translation.test.js` sur une page simulée) :
+The "page translated or not" state belongs to each tab: the title of the menu entry ("Translate this page to ..." or "Show original page") is recomputed when changing tab or window, and a click acts according to the state of the clicked tab. A page that reloads becomes "to translate" again. The state is never remembered in the service worker: the tab is asked.
 
-| Situation | Avant | Maintenant |
+## Nothing must stay untranslated: every case of text that escaped
+
+The original translator let text escape in several situations, all covered now (`pageTranslator.js`, tests in `tests/page-translation.test.js` on a simulated page):
+
+| Situation | Before | Now |
 |---|---|---|
-| texte nu ajouté après coup dans un élément existant (AJAX) | ignoré | traduit |
-| élément en ligne (span, lien) ajouté après coup | ignoré | traduit |
-| texte d'un nœud existant remplacé par la page (React, mises à jour de libellés) | jamais retraduit | retraduit |
-| composant isolé (shadow DOM ouvert), y compris ce qui y est ajouté | lu au départ seulement | surveillé et traduit |
-| texte normal affiché dans une balise `<code>` (courriel, consignes en police à chasse fixe) | jamais traduit | traduit (le vrai code ne l'est pas) |
-| bloc plus haut que l'écran, morceau dont la requête a échoué | jamais traduit | traduit, réessayé |
-| message mixte (français et anglais dans le même bloc) | pouvait être sauté en entier par mon filtre de langue | envoyé en entier ; seuls les blocs d'un seul morceau déjà dans la langue cible sont sautés |
-| tout ce que rien d'autre n'a vu | restait en version originale | balayage de sécurité toutes les 4 s |
+| bare text added later in an existing element (AJAX) | ignored | translated |
+| inline element (span, link) added later | ignored | translated |
+| text of an existing node replaced by the page (React, label updates) | never translated again | translated again |
+| isolated component (open shadow DOM), including what is added to it | read at the start only | watched and translated |
+| normal text displayed in a `<code>` tag (email, instructions in a fixed-width font) | never translated | translated (real code is not) |
+| block taller than the screen, piece whose request failed | never translated | translated, retried |
+| mixed message (French and English in the same block) | could be skipped entirely by the language filter | sent whole; only single-piece blocks already in the target language are skipped |
+| anything nothing else saw | stayed in the original version | safety sweep every 4 s |
 
-Un texte reste volontairement non traduit dans ces cas : zone éditable (`contenteditable`, pour ne pas toucher à ce que l'utilisateur écrit), contenu de `<textarea>`, éléments marqués `translate="no"` ou `notranslate` par le site, vrai code, cadres d'un autre site non accessibles.
+Text deliberately stays untranslated in these cases: editable area (`contenteditable`, so as not to touch what the user writes), `<textarea>` content, elements marked `translate="no"` or `notranslate` by the site, real code, frames of another site that are not accessible.
 
-## Résilience : une partie en échec ne bloque pas le reste
+## Resilience: a failed part does not block the rest
 
-Côté moteur (`translationService.js`) : une requête qui échoue ne fait plus échouer tout le lot (son bloc est rendu vide, les autres sont gardés) ; un échec n'est plus mémorisé (avant, la nouvelle tentative du même texte échouait aussitôt) ; les blocs que l'IA n'a pas pu traduire sont confiés à Google bloc par bloc. Côté page (`pageTranslator.js`) : un morceau sans réponse est réessayé jusqu'à 6 fois (2 s, 4 s, 8 s, 16 s, 30 s, 30 s). `tests/boot.test.js` contient deux tests de ce scénario qui échouaient sur le code précédent.
+On the engine side (`translationService.js`): a request that fails no longer makes the whole batch fail (its block is returned empty, the others are kept); a failure is no longer remembered (before, retrying the same text failed right away); blocks the AI could not translate are handed to Google block by block. On the page side (`pageTranslator.js`): a piece without an answer is retried up to 6 times (2 s, 4 s, 8 s, 16 s, 30 s, 30 s). `tests/boot.test.js` contains two tests of this scenario that failed on the previous code.
 
-## Texte lu et texte écrit : deux langues
+## Read text and written text: two languages
 
-Le texte **affiché** (page, texte sélectionné sur la page) est traduit dans la langue de **lecture** (français par défaut, « Read in »). Le texte **écrit** par l'utilisateur dans un champ (input, zone de texte, éditeur de Teams ou d'Outlook web) est traduit dans la langue d'**écriture** (anglais par défaut, « Write in »), celle du destinataire. Elles sont indépendantes : changer l'une ne touche pas l'autre. Le panneau l'indique (« Read in » ou « Write in »). Pour du texte écrit sélectionné, la bulle apparaît aussi, comme chez DeepL : un clic ouvre le panneau avec la traduction de la sélection dans la langue d'écriture, et « Replace » remplace uniquement la partie sélectionnée, puis le panneau se ferme. La fenêtre de message (écrire et voir la traduction en direct) utilise la langue d'écriture.
+**Displayed** text (page, text selected on the page) is translated into the **reading** language (French by default, "Read in"). Text **written** by the user in a field (input, text area, Teams or Outlook web editor) is translated into the **writing** language (English by default, "Write in"), the recipient's. They are independent: changing one does not touch the other. The panel says which one applies ("Read in" or "Write in"). For selected written text, the bubble also appears, as with DeepL: a click opens the panel with the translation of the selection into the writing language, and "Replace" replaces only the selected part, then the panel closes. The message window (write and see the translation live) uses the writing language.
 
-## Page entièrement traduite (défauts d'origine corrigés)
+The bubble's panel keeps the translations it has already obtained (same text and same language): reopening it does not call the AI again. The refresh button ("Translate again") ignores that memory.
 
-Le traducteur d'origine laissait des parties de page en version originale pour deux raisons, corrigées dans `pageTranslator.js` : (1) un morceau était marqué « traduit » avant l'envoi ; si la réponse échouait ou revenait vide, il n'était jamais réessayé — il l'est maintenant, jusqu'à 6 fois avec un délai croissant (2 s à 30 s) ; (2) un morceau plus haut que l'écran (haut au-dessus, bas en dessous) n'était jamais envoyé — tout morceau dont une partie est dans la zone visible l'est maintenant. Le texte est aussi traduit trois quarts d'écran à l'avance sous la zone visible, pour être déjà prêt quand on défile. `tests/page-translation.test.js` simule une page (jsdom) : ces tests échouent sur l'ancien code et réussissent sur le nouveau.
+## Fully translated page (original defects fixed)
 
-## Pages en plusieurs langues
+The original translator left parts of the page in their original version for two reasons, fixed in `pageTranslator.js`: (1) a piece was marked "translated" before being sent; if the answer failed or came back empty, it was never retried; it now is, up to 6 times with an increasing delay (2 s to 30 s); (2) a piece taller than the screen (top above, bottom below) was never sent; any piece with a part in the visible area now is. Text is also translated three quarters of a screen ahead below the visible area, to be ready when scrolling. `tests/page-translation.test.js` simulates a page (jsdom): these tests fail on the old code and pass on the new one.
 
-Les blocs de texte déjà écrits dans la langue cible ne sont pas retraduits : leur langue est détectée localement par le navigateur (sans réseau), et seuls les autres partent au traducteur. Une page moitié française, moitié anglaise, traduite en français, n'envoie que l'anglais ; une page déjà entièrement dans la langue cible n'appelle aucun traducteur. Les blocs de moins de 25 caractères ou dont la langue est incertaine sont traduits normalement (l'IA a aussi la consigne de laisser inchangé ce qui est déjà dans la langue cible). Le code est dans `src/background/skipTargetLanguage.js`.
+## Multilingual pages
 
-## Ce qui a été retiré
+Blocks of text already written in the target language are not translated again: their language is detected locally by the browser (without network), and only the others go to the translator. A half French, half English page translated into French only sends the English; a page already entirely in the target language calls no translator. Blocks shorter than 25 characters or whose language is uncertain are translated normally (the AI is also instructed to leave unchanged what is already in the target language). The code is in `src/background/skipTargetLanguage.js`.
 
-Popup, page d'options, raccourcis, bouton flottant, traduction au survol, synthèse vocale, services Bing, Yandex, DeepL et LibreTranslate, polyfill, feuille de style W3, 40 langues d'interface (restent l'anglais et le français), outils de construction (gulp, webpack), dons, notes de version. Le code retiré se retrouve dans le premier commit de ce dépôt (le projet d'origine tel quel).
+## Diagnostics and dashboard
 
-## Ce qui reste (tout le code utile)
+A log (last 1,000 events, session storage) records the requests to the AI (duration, budget wait, tokens, 429), the translation calls, the sends and results of the page, and the guards (stuck pieces, detected stalls). Setting `diagnostics` = "no" turns it off. The dashboard opens in a popup window (right-click, "Dashboard (diagnostics)", also in the toolbar icon menu): a summary with findings in plain words, the state of the page (why each text is not translated, including text written back unchanged), a filterable log, and a "Copy report" button. Calculations are in `src/dashboard/metrics.js` (tested).
 
-| Fichier | Rôle |
+## Theme
+
+Everything is dark at all times (message window, settings, dashboard, bubble, panels), whatever the browser theme.
+
+## What was removed
+
+Popup, options page, shortcuts, floating button, translation on hover, text to speech, the Bing, Yandex, DeepL and LibreTranslate services, polyfill, W3 style sheet, 40 interface languages (English and French remain), build tools (gulp, webpack), donations, release notes. The removed code can be found in the first commit of this repository (the original project as is).
+
+## What remains (all the useful code)
+
+| File | Role |
 |---|---|
-| `src/manifest.json` | permissions `storage` et `contextMenus` seulement |
-| `src/bg.js`, `src/background/menu.js` | menu du clic droit, ouverture des fenêtres, messages des pages |
-| `src/background/translationService.js`, `translationCache.js` | moteur de traduction (Google gratuit + IA) et cache |
-| `src/background/llmService.js` | service Groq : fournisseur reconnu à la clé `gsk_`, modèle automatique, limites de débit, contrôle de la réponse |
-| `src/contentScript/pageTranslator.js`, `showOriginal.js` | traduction de page d'origine (TWP) |
-| `src/contentScript/panel.js` | le panneau (sélection et champs de saisie) |
-| `src/composer/` | la fenêtre de message |
-| `src/setup/` | la page « Groq key... » |
-| `src/lib/` | configuration, langues, utilitaires d'origine |
-| `tests/` | tests sans réseau : `node --test tests/` |
+| `src/manifest.json` | permissions `storage`, `contextMenus` and `alarms` (automatic reload) |
+| `src/bg.js`, `src/background/menu.js` | right-click menu, window opening, page messages |
+| `src/background/translationService.js`, `translationCache.js` | translation engine (free Google + AI) and cache |
+| `src/background/llmService.js` | Groq service: provider recognized from the `gsk_` key, automatic model, rate limits, answer checking |
+| `src/background/skipTargetLanguage.js` | skips blocks already in the target language |
+| `src/background/diagnostics.js`, `src/dashboard/` | diagnostic log and dashboard |
+| `src/background/devReload.js` | automatic reload during development |
+| `src/contentScript/pageTranslator.js`, `showOriginal.js` | original page translation (TWP), with our fixes |
+| `src/contentScript/panel.js` | the panel and bubble (selection and input fields) |
+| `src/composer/` | the message window |
+| `src/setup/` | the "Groq key..." page |
+| `src/lib/` | configuration, languages, original utilities |
+| `tests/` | tests without network: `node --test tests/` |
 
-## Utilisation
+## Usage
 
-1. Brave, `brave://extensions`, mode développeur, « Charger l'extension non empaquetée », dossier `D:\Extension-traduction\depot\src`.
-2. Clic droit, **Groq key...**, coller la clé `gsk_...`, Save.
-3. Clic droit sur une page, un texte ou un champ.
+1. Brave or Chrome: `brave://extensions`, developer mode, "Load unpacked", the `src` folder of this repository.
+2. Right-click, **Groq key...**, paste the `gsk_...` key, Save.
+3. Right-click on a page, a text or a field.
 
-La clé reste dans le stockage de l'extension ; elle n'est envoyée qu'à Groq. Le texte traduit part chez Groq : éviter les pages privées ou d'entreprise.
+The key stays in the extension's storage; it is only sent to Groq. The translated text goes to Groq: avoid private or company pages.
 
-## Rechargement automatique (développement)
+## Automatic reload (development)
 
-`src/background/devReload.js` surveille les fichiers de l'extension (Chrome et Brave les relisent sur le disque) et la recharge toute seule quand l'un d'eux change, au plus 30 secondes après : plus besoin du bouton « Recharger » de brave://extensions. Il reste à rafraîchir (F5) la page testée, car un onglet déjà ouvert garde l'ancien script de page. La langue choisie et la clé Groq sont dans le stockage de l'extension : un rechargement ne les efface pas. Pour désactiver : retirer la ligne `devReload.js` de `src/bg.js` et la permission `alarms` du manifeste.
+`src/background/devReload.js` watches the extension's files (Chrome and Brave re-read them from disk) and reloads the extension by itself when one of them changes, within 30 seconds: no more "Reload" button in brave://extensions. The tested page still has to be refreshed (F5), because a tab that is already open keeps the old page script. The chosen language and the Groq key are in the extension's storage: a reload does not erase them. To turn it off: remove the `devReload.js` line from `src/bg.js` and the `alarms` permission from the manifest.
 
-## Diagnostics et tableau de bord
+## Updating from the original repository
 
-Un journal (1000 derniers événements, stockage de session) enregistre les requêtes à l'IA (durée, attente du budget, jetons, 429), les appels de traduction, les envois et résultats de la page et les garde-fous (morceaux bloqués, blocage détecté). Réglage `diagnostics` = "no" pour le couper. Le tableau de bord s'ouvre en fenêtre popup (clic droit, « Dashboard (diagnostics) », aussi dans le menu de l'icône) : résumé avec constats en clair, état de la page (pourquoi chaque texte n'est pas traduit), journal filtrable, bouton « Copy report ». Calculs dans `src/dashboard/metrics.js` (testés).
-
-## Budget de jetons saturé
-
-Si une requête devait attendre plus de 12 s (texte visible) ou 2,5 s (fond de page) la place dans le budget de jetons, elle échoue tout de suite et le bloc part chez Google (événement `llm.budget-skip`). Le garde-fou de blocage de la page attend 90 s (`diagStuckMs`) pour ne pas renvoyer en double des morceaux qui patientent.
-
-## Thème
-
-Tout est sombre en permanence (message, réglages, tableau de bord, bulle, panneaux), quel que soit le thème du navigateur.
-
-## Mettre à jour depuis le dépôt d'origine
-
-Notre historique ne contient pas celui du projet d'origine (seulement son état 10.2.5.0 dans le premier commit), donc `git merge` ne s'applique pas. Pour reprendre une correction du projet d'origine :
+Our history does not contain the original project's (only its 10.2.5.0 state in the first commit), so `git merge` does not apply. To take a fix from the original project:
 
 ```
 git remote add upstream https://github.com/FilipePS/Traduzir-paginas-web.git
 git fetch upstream chrome-mv3
-git diff <premier-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js src/contentScript/showOriginal.js
+git diff <first-commit> upstream/chrome-mv3 -- src/contentScript/pageTranslator.js src/contentScript/showOriginal.js
 node --test tests/
 ```
 
-`<premier-commit>` est le tout premier commit de ce dépôt (`git rev-list --max-parents=0 HEAD`). Le diff montre ce qui a changé dans le projet d'origine depuis notre base ; on reprend à la main ce qui touche `pageTranslator.js`, `showOriginal.js` et la logique de traduction de Google, en gardant notre version du reste (beaucoup de fichiers ont été supprimés ou réécrits : `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
+`<first-commit>` is the very first commit of this repository (`git rev-list --max-parents=0 HEAD`). The diff shows what changed in the original project since our base; what touches `pageTranslator.js`, `showOriginal.js` and Google's translation logic is taken by hand, keeping our version of the rest (many files were removed or rewritten: `translationService.js`, `languages.js`, `config.js`, `manifest.json`).
 
-## À savoir
+## Good to know
 
-- Les tests (80) vérifient le service IA, le manifeste, le démarrage du service worker, le menu, la bulle, la traduction de page et le tableau de bord, avec de faux objets `chrome` ; 20 d'entre eux (page et bulle) demandent jsdom et sont ignorés s'il n'est pas installé. Ils ne remplacent pas un essai dans Brave.
-- Cause probable des lenteurs de Google : le service d'origine récupère une clé non officielle dans un fichier JavaScript de Google (adresse figée dans le code).
-- Pas fait : la traduction de l'interface de l'extension elle-même (anglais seulement) et le renvoi automatique à Groq des textes revenus à l'identique.
+- The tests (80) check the AI service, the manifest, the service worker start, the menu, the bubble, page translation and the dashboard, with fake `chrome` objects; 20 of them (page and bubble) need jsdom and are skipped if it is not installed. They do not replace a try in the browser.
+- Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
+- Not done: translating the extension's own interface (English only) and automatically sending back to Groq the texts that came back unchanged.

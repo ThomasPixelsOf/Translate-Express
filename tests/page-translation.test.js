@@ -1,75 +1,75 @@
-// Test de la traduction de page (src/contentScript/pageTranslator.js) dans une page simulée (jsdom).
-// jsdom est cherché dans node_modules ; sans lui, ce fichier est ignoré.
+// Test of page translation (src/contentScript/pageTranslator.js) in a simulated page (jsdom).
+// jsdom is looked up in node_modules; without it, this file is skipped.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
 let JSDOM = null, VirtualConsole = null;
-for (const chemin of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
-  try { ({ JSDOM, VirtualConsole } = require(chemin)); break; } catch (e) { /* suivant */ }
+for (const filePath of ["jsdom", path.join(__dirname, "..", "node_modules", "jsdom")]) {
+  try { ({ JSDOM, VirtualConsole } = require(filePath)); break; } catch (e) { /* next */ }
 }
 const SRC = path.join(__dirname, "..", "src");
-const lire = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
-const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
+const read = (f) => fs.readFileSync(path.join(SRC, f), "utf8");
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Une page de 6 paragraphes positionnés par data-top / data-bottom (jsdom ne fait pas de mise en page).
-function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = {}) {
-  const lignes = [
-    ["p1", 20, 60], ["p2", 80, 120], ["p3", 140, 180], // à l'écran (hauteur 600)
-    ["p4", 700, 740],                                   // juste sous l'écran, dans la marge de prélecture
-    ["p5", 3000, 3040],                                 // très loin : ne doit PAS être traduit tout de suite
-    ["gros", -2000, 5000],                              // un bloc plus haut que l'écran : il couvre tout l'écran
+// A page of 6 paragraphs positioned by data-top / data-bottom (jsdom does no layout).
+function createPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = {}) {
+  const rows = [
+    ["p1", 20, 60], ["p2", 80, 120], ["p3", 140, 180], // on screen (height 600)
+    ["p4", 700, 740],                                   // just below the screen, in the look-ahead margin
+    ["p5", 3000, 3040],                                 // very far: must NOT be translated right away
+    ["tall", -2000, 5000],                              // a block taller than the screen: it covers the whole screen
   ];
-  const corps = lignes.map(([id, h, b]) => `<p id="${id}" data-top="${h}" data-bottom="${b}">Texte anglais numero ${id} pour la traduction.</p>`).join("");
+  const body = rows.map(([id, h, b]) => `<p id="${id}" data-top="${h}" data-bottom="${b}">English text number ${id} for translation.</p>`).join("");
   const virtualConsole = new VirtualConsole();
   if (process.env.TWP_DEBUG) for (const ev of ["log", "warn", "error", "jsdomError"]) virtualConsole.on(ev, (...a) => console.log("page", ev, ...a.map((x) => (x && x.message) || x)));
-  const dom = new JSDOM(`<!doctype html><html><body>${corps}</body></html>`, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/", virtualConsole });
+  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://exemple.test/", virtualConsole });
   const w = dom.window;
   w.eval(`Object.defineProperty(window, "innerHeight", { value: 600, configurable: true });`);
   w.HTMLElement.prototype.getBoundingClientRect = function () {
-    if (this.hasAttribute("data-hidden")) return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }; // masqué (display:none)
+    if (this.hasAttribute("data-hidden")) return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }; // hidden (display:none)
     const top = Number(this.getAttribute("data-top") || 0), bottom = Number(this.getAttribute("data-bottom") || 0);
     return { top, bottom, left: 0, right: 100, width: 100, height: bottom - top };
   };
 
-  const demandes = []; // une entrée par appel « translateHTML »
-  const priorites = []; // priorité de chaque appel : « high » (visible) ou « low » (reste de la page)
-  let echecsRestants = echecsAvantSucces;
-  let tronquer = tronquerPremiereReponse;
-  const ecouteurs = [];
+  const requests = []; // one entry per "translateHTML" call
+  const priorities = []; // priority of each call: "high" (visible) or "low" (rest of the page)
+  let failuresLeft = echecsAvantSucces;
+  let truncate = tronquerPremiereReponse;
+  const listeners = [];
   w.chrome = {
     runtime: {
       lastError: undefined,
       inIncognitoContext: false,
       getURL: (p) => p,
-      onMessage: { addListener: (f) => ecouteurs.push(f) },
+      onMessage: { addListener: (f) => listeners.push(f) },
       sendMessage: (m, cb) => {
         if (process.env.TWP_DEBUG) console.log("message ->", m.action);
-        const repondre = (r) => cb && setTimeout(() => cb(r), 0);
+        const reply = (r) => cb && setTimeout(() => cb(r), 0);
         if (m.action === "translateHTML") {
-          demandes.push(m.sourceArray2d.map((b) => b.join(" ")));
-          priorites.push(m.priority);
-          if (echecsRestants > 0) { echecsRestants--; return repondre(undefined); } // le moteur échoue
-          if (tronquer && m.sourceArray2d.some((b) => b.length > 1)) {
-            // Le moteur ne renvoie que le premier morceau de chaque bloc : les suivants restent à traduire.
-            tronquer = false;
-            return repondre(m.sourceArray2d.map((b) => b.map((s, k) => (k === 0 ? "[fr] " + s : undefined)).filter((x) => x !== undefined)));
+          requests.push(m.sourceArray2d.map((b) => b.join(" ")));
+          priorities.push(m.priority);
+          if (failuresLeft > 0) { failuresLeft--; return reply(undefined); } // the engine fails
+          if (truncate && m.sourceArray2d.some((b) => b.length > 1)) {
+            // The engine only returns the first piece of each block: the following ones are left to translate.
+            truncate = false;
+            return reply(m.sourceArray2d.map((b) => b.map((s, k) => (k === 0 ? "[fr] " + s : undefined)).filter((x) => x !== undefined)));
           }
-          return repondre(m.sourceArray2d.map((b) => b.map((s) => "[fr] " + s)));
+          return reply(m.sourceArray2d.map((b) => b.map((s) => "[fr] " + s)));
         }
-        if (m.action === "detectTabLanguage" || m.action === "getMainFrameTabLanguage") return repondre("en");
-        if (m.action === "getMainFramePageLanguageState") return repondre("original");
-        if (m.action === "getTabHostName") return repondre("exemple.test");
-        return repondre(undefined);
+        if (m.action === "detectTabLanguage" || m.action === "getMainFrameTabLanguage") return reply("en");
+        if (m.action === "getMainFramePageLanguageState") return reply("original");
+        if (m.action === "getTabHostName") return reply("exemple.test");
+        return reply(undefined);
       },
     },
     extension: { inIncognitoContext: false },
     i18n: { getUILanguage: () => "fr", getMessage: () => "", detectLanguage: (t, cb) => cb({ isReliable: false, languages: [] }) },
   };
-  const defauts = { customDictionary: new Map(), targetLanguages: ["fr"], targetLanguage: "fr", pageTranslatorService: "google", translateTag_pre: "yes", translateDynamicallyCreatedContent: "yes" };
+  const defaults = { customDictionary: new Map(), targetLanguages: ["fr"], targetLanguage: "fr", pageTranslatorService: "google", translateTag_pre: "yes", translateDynamicallyCreatedContent: "yes" };
   w.twpConfig = {
-    get: (k) => (k in defauts ? defauts[k] : (/Sites|Langs|Languages$/.test(k) ? [] : "no")),
+    get: (k) => (k in defaults ? defaults[k] : (/Sites|Langs|Languages$/.test(k) ? [] : "no")),
     set() {}, onChanged() {}, onReady: (cb) => cb && cb(),
   };
   w.twpLang = { fixTLanguageCode: (c) => c, codeToLanguage: (c) => c };
@@ -77,224 +77,224 @@ function creerPage({ echecsAvantSucces = 0, tronquerPremiereReponse = false } = 
   w.platformInfo = { isMobile: { any: false }, isDesktop: { any: true }, isFirefox: false };
   w.checkedLastError = () => {};
   w.fetch = async () => ({ ok: true, text: async () => "" });
-  // Les deux scripts dans un même bloc : le second utilise la constante `showOriginal` définie par le premier.
-  w.eval([lire("contentScript/showOriginal.js"), lire("contentScript/pageTranslator.js")].join(String.fromCharCode(10)));
-  const envoyer = (m) => ecouteurs.forEach((f) => f(m, {}, () => {}));
-  const texte = (id) => w.document.getElementById(id).textContent;
-  return { w, demandes, priorites, envoyer, texte };
+  // Both scripts in the same block: the second uses the `showOriginal` constant defined by the first.
+  w.eval([read("contentScript/showOriginal.js"), read("contentScript/pageTranslator.js")].join(String.fromCharCode(10)));
+  const send = (m) => listeners.forEach((f) => f(m, {}, () => {}));
+  const text = (id) => w.document.getElementById(id).textContent;
+  return { w, requests, priorities, send, text };
 }
 
-const ignorer = JSDOM ? false : "jsdom introuvable";
+const skipReason = JSDOM ? false : "jsdom introuvable";
 
-test("page simulée : le texte à l'écran, sous l'écran et un bloc plus haut que l'écran sont traduits ; le texte très éloigné est traduit ensuite", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = creerPage();
-  const fermer = () => page.w.close();
+test("simulated page: text on screen, below the screen and a block taller than the screen are translated; very distant text is translated afterwards", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = createPage();
+  const shut = () => page.w.close();
   try {
-  await attendre(150); // le script de page finit son initialisation (réponses asynchrones du fond)
-  page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-  await attendre(1200);
-  for (const id of ["p1", "p2", "p3"]) assert.match(page.texte(id), /^\[fr\]/, id + " (à l'écran) doit être traduit");
-  assert.match(page.texte("p4"), /^\[fr\]/, "p4 (juste sous l'écran) est prélu");
-  assert.match(page.texte("gros"), /^\[fr\]/, "un bloc plus haut que l'écran était ignoré avant la correction");
-  assert.doesNotMatch(page.texte("p5"), /^\[fr\]/, "p5 est très loin : pas traduit dans l'immédiat (le visible passe d'abord)");
-    await attendre(5000);
-    assert.match(page.texte("p5"), /^\[fr\]/, "mais il est traduit ensuite, en tâche de fond, sans qu'il faille défiler");
-  } finally { fermer(); }
+  await wait(150); // the page script finishes its initialization (asynchronous answers from the background)
+  page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+  await wait(1200);
+  for (const id of ["p1", "p2", "p3"]) assert.match(page.text(id), /^\[fr\]/, id + " (on screen) must be translated");
+  assert.match(page.text("p4"), /^\[fr\]/, "p4 (just below the screen) is preloaded");
+  assert.match(page.text("tall"), /^\[fr\]/, "a block taller than the screen was ignored before the fix");
+  assert.doesNotMatch(page.text("p5"), /^\[fr\]/, "p5 is very far: not translated immediately (what is visible goes first)");
+    await wait(5000);
+    assert.match(page.text("p5"), /^\[fr\]/, "but it is translated afterwards, in the background, without scrolling");
+  } finally { shut(); }
 });
 
-test("page simulée : un morceau dont la traduction échoue est réessayé au lieu de rester en version originale", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = creerPage({ echecsAvantSucces: 1 });
-  const fermer = () => page.w.close();
-  try { // le premier appel au moteur échoue
-  await attendre(150); // le script de page finit son initialisation (réponses asynchrones du fond)
-  page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-  await attendre(900);
-  assert.doesNotMatch(page.texte("p1"), /^\[fr\]/, "après l'échec, rien n'est encore traduit");
-  await attendre(4000); // délai de réessai (1,5 s) + marge
-  for (const id of ["p1", "p2", "p3", "p4"]) assert.match(page.texte(id), /^\[fr\]/, id + " doit être traduit après le réessai");
-  assert.ok(page.demandes.length >= 2, "le moteur a été sollicité de nouveau");
-  } finally { fermer(); }
+test("simulated page: a piece whose translation fails is retried instead of staying in its original version", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = createPage({ echecsAvantSucces: 1 });
+  const shut = () => page.w.close();
+  try { // the first call to the engine fails
+  await wait(150); // the page script finishes its initialization (asynchronous answers from the background)
+  page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+  await wait(900);
+  assert.doesNotMatch(page.text("p1"), /^\[fr\]/, "after the failure, nothing is translated yet");
+  await wait(4000); // retry delay (1.5 s) + margin
+  for (const id of ["p1", "p2", "p3", "p4"]) assert.match(page.text(id), /^\[fr\]/, id + " must be translated after the retry");
+  assert.ok(page.requests.length >= 2, "the engine was called again");
+  } finally { shut(); }
 });
 
-test("page simulée : l'original revient intact avec « restorePage »", { skip: ignorer, timeout: 20000 }, async () => {
-  const page = creerPage();
-  const fermer = () => page.w.close();
+test("simulated page: the original comes back intact with \"restorePage\"", { skip: skipReason, timeout: 20000 }, async () => {
+  const page = createPage();
+  const shut = () => page.w.close();
   try {
-  const avant = page.texte("p1");
-  await attendre(150); // le script de page finit son initialisation (réponses asynchrones du fond)
-  page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-  await attendre(1200);
-  assert.match(page.texte("p1"), /^\[fr\]/);
-  page.envoyer({ action: "restorePage" });
-  await attendre(300);
-  assert.equal(page.texte("p1"), avant);
-  } finally { fermer(); }
+  const before = page.text("p1");
+  await wait(150); // the page script finishes its initialization (asynchronous answers from the background)
+  page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+  await wait(1200);
+  assert.match(page.text("p1"), /^\[fr\]/);
+  page.send({ action: "restorePage" });
+  await wait(300);
+  assert.equal(page.text("p1"), before);
+  } finally { shut(); }
 });
 
-// ---- Texte qui échappe à la traduction : tous les cas doivent être rattrapés ----
-// Page de départ traduite, puis on modifie la page comme le ferait une application (AJAX, React, composants isolés...).
-async function pageTraduite(extraBody = "", avantTraduction = () => {}) {
-  const page = creerPage();
+// ---- Text that escapes translation: all the cases must be caught ----
+// Page translated at the start, then the page is modified as an application would (AJAX, React, isolated components...).
+async function pageTranslated(extraBody = "", avantTraduction = () => {}) {
+  const page = createPage();
   if (extraBody) page.w.document.body.insertAdjacentHTML("beforeend", extraBody);
   avantTraduction(page);
-  await attendre(150);
-  page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-  await attendre(1200);
+  await wait(150);
+  page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+  await wait(1200);
   return page;
 }
-const position = (el, haut = 100, bas = 140) => { el.setAttribute("data-top", String(haut)); el.setAttribute("data-bottom", String(bas)); return el; };
+const position = (el, haut = 100, lowCalls = 140) => { el.setAttribute("data-top", String(haut)); el.setAttribute("data-bottom", String(lowCalls)); return el; };
 const estTraduit = (txt) => /\[fr\]/.test(txt);
 
-test("texte ajouté après coup : un nœud texte nu ajouté dans un élément existant est traduit", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite();
+test("text added later: a bare text node added in an existing element is translated", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated();
   try {
     const p = page.w.document.getElementById("p1");
     p.appendChild(page.w.document.createTextNode(" Extra sentence added later by the application."));
-    await attendre(3500); // le traducteur relit les ajouts toutes les 2 s
-    assert.match(p.textContent, /\[fr\]\s+Extra sentence added later/, "un texte nu ajouté était ignoré avant la correction");
+    await wait(3500); // the translator re-reads additions every 2 s
+    assert.match(p.textContent, /\[fr\]\s+Extra sentence added later/, "bare text was ignored before the fix");
   } finally { page.w.close(); }
 });
 
-test("texte ajouté après coup : un élément en ligne (span) ajouté dans un élément existant est traduit", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite();
+test("text added later: an inline element (span) added in an existing element is translated", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated();
   try {
     const p = page.w.document.getElementById("p2");
     const span = page.w.document.createElement("span");
     span.textContent = "Inline label appended dynamically";
     p.appendChild(span);
-    await attendre(3500);
-    assert.match(span.textContent, /\[fr\] Inline label appended/, "un élément en ligne ajouté était ignoré avant la correction");
+    await wait(3500);
+    assert.match(span.textContent, /\[fr\] Inline label appended/, "an added inline element was ignored before the fix");
   } finally { page.w.close(); }
 });
 
-test("texte modifié par la page : un nœud déjà traduit dont le texte est remplacé est retraduit", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite();
+test("text modified by the page: an already translated node whose text is replaced is translated again", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated();
   try {
     const p = page.w.document.getElementById("p3");
-    const noeud = p.firstChild.nodeType === 3 ? p.firstChild : p.firstChild.firstChild; // le texte (éventuellement dans <font>)
-    assert.match(p.textContent, /\[fr\]/, "d'abord traduit");
-    noeud.data = "Brand new English sentence written by the page.";
-    await attendre(3500);
-    assert.match(p.textContent, /\[fr\] Brand new English sentence/, "un texte modifié par la page n'était jamais retraduit");
+    const node = p.firstChild.nodeType === 3 ? p.firstChild : p.firstChild.firstChild; // the text (possibly inside <font>)
+    assert.match(p.textContent, /\[fr\]/, "translated first");
+    node.data = "Brand new English sentence written by the page.";
+    await wait(3500);
+    assert.match(p.textContent, /\[fr\] Brand new English sentence/, "text modified by the page was never translated again");
   } finally { page.w.close(); }
 });
 
-test("zone isolée (shadow DOM) : le texte qu'elle contient est traduit, y compris ce qui y est ajouté ensuite", { skip: ignorer, timeout: 30000 }, async () => {
-  let interieur;
-  const page = await pageTraduite("", (pg) => {
-    const hote = pg.w.document.createElement("div");
-    position(hote, 300, 360);
-    pg.w.document.body.appendChild(hote);
-    const racine = hote.attachShadow({ mode: "open" });
-    interieur = pg.w.document.createElement("p");
-    position(interieur, 300, 340);
-    interieur.textContent = "Text living inside an isolated component.";
-    racine.appendChild(interieur);
+test("isolated area (shadow DOM): the text it contains is translated, including what is added afterwards", { skip: skipReason, timeout: 30000 }, async () => {
+  let inside;
+  const page = await pageTranslated("", (pg) => {
+    const host = pg.w.document.createElement("div");
+    position(host, 300, 360);
+    pg.w.document.body.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    inside = pg.w.document.createElement("p");
+    position(inside, 300, 340);
+    inside.textContent = "Text living inside an isolated component.";
+    root.appendChild(inside);
   });
   try {
-    assert.match(interieur.textContent, /\[fr\]/, "texte présent au départ dans la zone isolée");
-    const ajout = page.w.document.createElement("p");
-    position(ajout, 350, 380);
-    ajout.textContent = "Another sentence added inside the isolated component.";
-    interieur.parentNode.appendChild(ajout);
-    await attendre(3500);
-    assert.match(ajout.textContent, /\[fr\] Another sentence added inside/, "ajout dans une zone isolée");
+    assert.match(inside.textContent, /\[fr\]/, "text present at the start in the isolated area");
+    const added = page.w.document.createElement("p");
+    position(added, 350, 380);
+    added.textContent = "Another sentence added inside the isolated component.";
+    inside.parentNode.appendChild(added);
+    await wait(3500);
+    assert.match(added.textContent, /\[fr\] Another sentence added inside/, "addition in an isolated area");
   } finally { page.w.close(); }
 });
 
-test("bloc <code> : du texte normal affiché en police à chasse fixe est traduit, du vrai code ne l'est pas", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite(
+test("<code> block: normal text displayed in a fixed-width font is translated, real code is not", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated(
     '<code id="prose" data-top="400" data-bottom="440">Instructions for submitting an IT helpdesk request: describe the problem in detail.</code>' +
-    '<code id="vrai" data-top="450" data-bottom="470">const total = compute(a, b) ? x[0] : y{1};</code>'
+    '<code id="real" data-top="450" data-bottom="470">const total = compute(a, b) ? x[0] : y{1};</code>'
   );
   try {
-    assert.match(page.texte("prose"), /^\[fr\]/, "texte normal dans <code> : traduit");
-    assert.doesNotMatch(page.texte("vrai"), /\[fr\]/, "vrai code : laissé tel quel");
+    assert.match(page.text("prose"), /^\[fr\]/, "normal text in <code>: translated");
+    assert.doesNotMatch(page.text("real"), /\[fr\]/, "real code: left as is");
   } finally { page.w.close(); }
 });
 
-test("le balayage de sécurité rattrape un texte que ni l'observateur ni la file n'ont vu", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite();
+test("the safety sweep catches text that neither the observer nor the queue saw", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated();
   try {
-    // On insère un paragraphe puis on « oublie » qu'il a été vu : seul le balayage périodique peut le retrouver.
+    // A paragraph is inserted then "forgotten" as seen: only the periodic sweep can find it again.
     const p = page.w.document.createElement("p");
     position(p, 200, 240);
     p.textContent = "Paragraph inserted behind the back of every observer.";
     page.w.document.body.appendChild(p);
-    await attendre(6500); // balayage toutes les 4 s
+    await wait(6500); // balayage all les 4 s
     assert.match(p.textContent, /\[fr\] Paragraph inserted/);
   } finally { page.w.close(); }
 });
 
-test("pas de boucle : un texte déjà traduit n'est pas renvoyé au traducteur à chaque balayage", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = await pageTraduite();
+test("no loop: already translated text is not sent back to the translator at every sweep", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = await pageTranslated();
   try {
-    await attendre(500);
-    const avant = page.demandes.length;
-    await attendre(9000); // deux balayages et plusieurs relectures
-    assert.equal(page.demandes.length, avant, "aucune nouvelle demande : le texte déjà traduit n'est pas retraduit");
-    assert.doesNotMatch(page.texte("p1"), /\[fr\] \[fr\]/, "pas de double traduction");
+    await wait(500);
+    const before = page.requests.length;
+    await wait(9000); // deux balayages et plusieurs relectures
+    assert.equal(page.requests.length, before, "no new request: already translated text is not translated again");
+    assert.doesNotMatch(page.text("p1"), /\[fr\] \[fr\]/, "no double translation");
   } finally { page.w.close(); }
 });
 
-test("réponse tronquée : les morceaux d'un même bloc restés sans traduction sont réessayés (début traduit, fin non)", { skip: ignorer, timeout: 30000 }, async () => {
-  const page = creerPage({ tronquerPremiereReponse: true });
+test("truncated answer: pieces of the same block left untranslated are retried (start translated, end not)", { skip: skipReason, timeout: 30000 }, async () => {
+  const page = createPage({ tronquerPremiereReponse: true });
   try {
     page.w.document.body.insertAdjacentHTML("beforeend", '<p id="mix" data-top="300" data-bottom="340">First sentence here <b>bold part</b> and the final words.</p>');
-    await attendre(150);
-    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-    await attendre(900);
-    const apres1 = page.texte("mix");
-    assert.match(apres1, /\[fr\] First sentence/, "le début est traduit");
-    assert.doesNotMatch(apres1, /\[fr\]\s+and the final words/, "la fin n'est pas encore traduite (réponse tronquée)");
-    await attendre(4500); // réessai des morceaux manquants
-    assert.match(page.texte("mix"), /\[fr\] bold part/, "morceau du milieu traduit après le réessai");
-    assert.match(page.texte("mix"), /\[fr\]\s+and the final words/, "la fin est traduite après le réessai");
+    await wait(150);
+    page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await wait(900);
+    const after1 = page.text("mix");
+    assert.match(after1, /\[fr\] First sentence/, "the start is translated");
+    assert.doesNotMatch(after1, /\[fr\]\s+and the final words/, "the end is not translated yet (truncated answer)");
+    await wait(4500); // retry of the missing pieces
+    assert.match(page.text("mix"), /\[fr\] bold part/, "middle piece translated after the retry");
+    assert.match(page.text("mix"), /\[fr\]\s+and the final words/, "the end is translated after the retry");
   } finally { page.w.close(); }
 });
 
-test("priorité : le visible est envoyé d'abord (high), puis le reste du plus proche au plus lointain (low), le masqué en dernier ; rien n'est ignoré", { skip: ignorer, timeout: 40000 }, async () => {
-  const page = creerPage();
+test("priority: what is visible is sent first (high), then the rest from the closest to the farthest (low), hidden last; nothing is ignored", { skip: skipReason, timeout: 40000 }, async () => {
+  const page = createPage();
   try {
     const doc = page.w.document;
-    // trois paragraphes hors écran, ajoutés dans le désordre : le plus lointain d'abord, puis un masqué, puis le plus proche
+    // three off-screen paragraphs, added in disorder: the farthest first, then a hidden one, then the closest
     doc.body.insertAdjacentHTML("beforeend",
-      '<p id="loin2" data-top="9000" data-bottom="9040">Far away paragraph number two.</p>' +
-      '<p id="cache" data-hidden="1">Hidden paragraph inside an inactive tab.</p>' +
-      '<p id="loin1" data-top="2500" data-bottom="2540">Closer paragraph number one.</p>');
-    await attendre(150);
-    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-    await attendre(9000);
-    // 1) la première demande est celle du visible, en haute priorité
-    assert.equal(page.priorites[0], "high");
-    assert.ok(page.demandes[0].some((s) => /numero p1/.test(s)), "le visible part en premier");
-    // 2) le reste part ensuite en priorité basse, dans l'ordre : proche, lointain, masqué
-    const bas = [];
-    page.demandes.forEach((d, i) => { if (page.priorites[i] === "low") d.forEach((s) => bas.push(s)); });
-    const rang = (mot) => bas.findIndex((s) => s.includes(mot));
-    assert.ok(rang("Closer paragraph") >= 0 && rang("Far away") >= 0 && rang("Hidden paragraph") >= 0, "tout est traduit en tâche de fond : " + JSON.stringify(bas));
-    assert.ok(rang("Closer paragraph") < rang("Far away"), "le plus proche de l'écran d'abord");
-    assert.ok(rang("Far away") < rang("Hidden paragraph"), "le masqué en dernier");
-    // 3) rien n'est resté en version originale
-    for (const id of ["p1", "p5", "loin1", "loin2", "cache"]) assert.match(page.texte(id), /^\[fr\]/, id + " finit traduit");
+      '<p id="far" data-top="9000" data-bottom="9040">Far away paragraph number two.</p>' +
+      '<p id="hidden" data-hidden="1">Hidden paragraph inside an inactive tab.</p>' +
+      '<p id="near" data-top="2500" data-bottom="2540">Closer paragraph number one.</p>');
+    await wait(150);
+    page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await wait(9000);
+    // 1) the first request is the visible one, with high priority
+    assert.equal(page.priorities[0], "high");
+    assert.ok(page.requests[0].some((s) => /number p1/.test(s)), "what is visible goes first");
+    // 2) the rest then goes out with low priority, in order: close, far, hidden
+    const lowCalls = [];
+    page.requests.forEach((d, i) => { if (page.priorities[i] === "low") d.forEach((s) => lowCalls.push(s)); });
+    const rank = (mot) => lowCalls.findIndex((s) => s.includes(mot));
+    assert.ok(rank("Closer paragraph") >= 0 && rank("Far away") >= 0 && rank("Hidden paragraph") >= 0, "everything is translated in the background: " + JSON.stringify(lowCalls));
+    assert.ok(rank("Closer paragraph") < rank("Far away"), "the closest to the screen first");
+    assert.ok(rank("Far away") < rank("Hidden paragraph"), "the hidden one last");
+    // 3) nothing stayed in its original version
+    for (const id of ["p1", "p5", "near", "far", "hidden"]) assert.match(page.text(id), /^\[fr\]/, id + " ends up translated");
   } finally { page.w.close(); }
 });
 
-test("priorité : quand on défile vers un texte en attente, il passe tout de suite en priorité haute", { skip: ignorer, timeout: 40000 }, async () => {
-  const page = creerPage();
+test("priority: when scrolling to a waiting text, it immediately gets high priority", { skip: skipReason, timeout: 40000 }, async () => {
+  const page = createPage();
   try {
     const doc = page.w.document;
-    doc.body.insertAdjacentHTML("beforeend", '<p id="suite" data-top="4000" data-bottom="4040">Paragraph that will be scrolled into view.</p>');
-    await attendre(150);
-    page.envoyer({ action: "translatePage", targetLanguage: "fr", service: "google" });
-    await attendre(700); // le visible est parti ; « suite » attend (très loin, pas encore en tâche de fond)
-    assert.doesNotMatch(page.texte("suite"), /^\[fr\]/);
-    // L'utilisateur défile : le paragraphe arrive à l'écran.
-    doc.getElementById("suite").setAttribute("data-top", "200");
-    doc.getElementById("suite").setAttribute("data-bottom", "240");
-    await attendre(900);
-    assert.match(page.texte("suite"), /^\[fr\]/, "traduit rapidement une fois visible");
-    const i = page.demandes.findIndex((d) => d.some((s) => /scrolled into view/.test(s)));
-    assert.equal(page.priorites[i], "high", "un texte qui devient visible est traité en priorité haute");
+    doc.body.insertAdjacentHTML("beforeend", '<p id="later" data-top="4000" data-bottom="4040">Paragraph that will be scrolled into view.</p>');
+    await wait(150);
+    page.send({ action: "translatePage", targetLanguage: "fr", service: "google" });
+    await wait(700); // the visible text has left; "later" waits (very far, not yet in the background)
+    assert.doesNotMatch(page.text("later"), /^\[fr\]/);
+    // The user scrolls: the paragraph arrives on screen.
+    doc.getElementById("later").setAttribute("data-top", "200");
+    doc.getElementById("later").setAttribute("data-bottom", "240");
+    await wait(900);
+    assert.match(page.text("later"), /^\[fr\]/, "translated quickly once visible");
+    const i = page.requests.findIndex((d) => d.some((s) => /scrolled into view/.test(s)));
+    assert.equal(page.priorities[i], "high", "a text that becomes visible is handled with high priority");
   } finally { page.w.close(); }
 });

@@ -1,10 +1,10 @@
 "use strict";
 
-// Journal de diagnostic : ce qui se passe pendant une traduction, pour comprendre pourquoi c'est lent ou incomplet.
-// Les événements (requêtes à l'IA, attentes de budget, erreurs, envois et résultats de la page, blocages détectés...) sont
-// gardés dans un tampon circulaire (les 1000 derniers), conservé dans le stockage de session du navigateur.
-// Réglage : « diagnostics » = "no" coupe le journal. La vue « Diagnostics » (clic droit) affiche un résumé, l'état de la
-// page et le journal, avec un bouton pour copier le rapport.
+// Diagnostic log: what happens during a translation, to understand why it is slow or incomplete.
+// Events (AI requests, budget waits, errors, page sends and results, detected stalls...) are
+// kept in a circular buffer (the last 1000), stored in the browser's session storage.
+// Setting: "diagnostics" = "no" turns the log off. The "Dashboard" (right-click) shows a summary, the state of the
+// page and the log, with a button to copy the report.
 
 var twpDiag = (function () {
   const MAX_EVENTS = 1000;
@@ -31,7 +31,7 @@ var twpDiag = (function () {
         const a = area();
         if (a) a.set({ [KEY]: buffer });
       } catch (e) {
-        /* le journal ne doit jamais gêner la traduction */
+        /* the log must never get in the way of translation */
       }
     }, 800);
   }
@@ -42,13 +42,13 @@ var twpDiag = (function () {
     persistSoon();
   }
 
-  /** Ajoute un événement : type court (« llm.request », « html.call »...) et données. */
+  /** Adds an event: short type ("llm.request", "html.call"...) and data. */
   function log(type, data = {}) {
     if (!enabled()) return;
     push({ t: Date.now(), type, ...data });
   }
 
-  // Le service worker s'endort : on recharge le journal au réveil.
+  // The service worker goes to sleep: the log is reloaded on wake-up.
   const ready = (async () => {
     try {
       const a = area();
@@ -56,7 +56,7 @@ var twpDiag = (function () {
       const stored = await a.get(KEY);
       if (stored && Array.isArray(stored[KEY])) buffer = [...stored[KEY], ...buffer].slice(-MAX_EVENTS);
     } catch (e) {
-      /* pas de journal conservé */
+      /* no stored log */
     }
   })();
 
@@ -68,7 +68,7 @@ var twpDiag = (function () {
   return { log, get: () => buffer.slice(), clear, ready, enabled, MAX_EVENTS };
 })();
 
-// Messages : les pages envoient leurs événements ; la vue « Diagnostics » lit, efface et demande l'état d'une page.
+// Messages: pages send their events; the dashboard reads, clears and asks for the state of a page.
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "twpLog") {
     const host = sender.tab && sender.tab.url ? safeHost(sender.tab.url) : undefined;
@@ -82,7 +82,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     twpDiag.clear();
     sendResponse(true);
   } else if (request.action === "twpDiagPageReport") {
-    // L'état détaillé d'une page est connu de son script de page : on lui pose la question (cadre principal).
+    // The detailed state of a page is known to its page script: ask it (main frame).
     pageTabId(request.tabId).then((tabId) => {
       if (!tabId) return sendResponse({ error: "no page to inspect: open the dashboard from a normal page" });
       chrome.tabs.sendMessage(tabId, { action: "twpPageReport" }, { frameId: 0 }, (report) => {
@@ -103,8 +103,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Onglet à examiner : celui demandé, sinon la page normale ouverte au premier plan la plus récemment utilisée
-// (le tableau de bord est une fenêtre popup : « l'onglet actif » serait lui-même).
+// Tab to examine: the requested one, otherwise the most recently used normal page open in the foreground
+// (the dashboard is a popup window: "the active tab" would be itself).
 async function pageTabId(wanted) {
   if (wanted) return wanted;
   try {

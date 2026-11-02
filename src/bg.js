@@ -1,4 +1,4 @@
-// Service worker de l'extension : tout ce qui tourne en arrière-plan.
+// The extension's service worker: everything that runs in the background.
 importScripts("/lib/XMLHttpRequestShim.js");
 importScripts("/lib/checkedLastError.js");
 importScripts("/lib/stuff.js");

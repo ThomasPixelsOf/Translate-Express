@@ -1,13 +1,13 @@
 "use strict";
 
-// Menu du clic droit : c'est la seule porte d'entrée de l'extension.
-//   texte sélectionné        -> « Translate selection »   (panneau près de la sélection)
-//   champ de saisie          -> « Translate what I'm writing » (panneau, avec Replace)
-//   page                     -> « Translate this page » / « Show original »
-//   partout                  -> « Message window » (écrire et voir la traduction en direct), « Groq key… »
-// Aucun réglage : langue cible = langue du navigateur, source détectée, IA si une clé Groq est enregistrée.
+// Right-click menu: the only entry point of the extension.
+//   selected text           -> "Translate selection"   (panel near the selection)
+//   input field             -> "Translate what I'm writing" (panel, with Replace)
+//   page                    -> "Translate this page" / "Show original"
+//   everywhere              -> "Message window" (write and see the translation live), "Groq key..."
+// No settings: target language = browser language, source detected, AI if a Groq key is saved.
 
-// Langues proposées directement dans le menu ; la liste complète est dans « Language and Groq key... ».
+// Languages offered directly in the menu; the full list is in "Language and Groq key...".
 const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", "zh-CN", "ar"];
 
 const MENU = {
@@ -22,8 +22,8 @@ const MENU = {
   key: "twp-key",
 };
 
-// L'état « page traduite ou non » appartient à chaque onglet : on le demande à l'onglet concerné (jamais mémorisé ici,
-// sinon un onglet afficherait l'état de l'onglet précédent).
+// The "page translated or not" state belongs to each tab: the tab concerned is asked (never remembered here,
+// otherwise a tab would show the state of the previous tab).
 function getTabPageState(tabId, callback) {
   if (!tabId) return callback("original");
   chrome.tabs.sendMessage(tabId, { action: "getCurrentPageLanguageState" }, { frameId: 0 }, (state) => {
@@ -32,13 +32,13 @@ function getTabPageState(tabId, callback) {
   });
 }
 
-// Langue par défaut, tant que l'utilisateur n'a pas choisi la sienne : le français.
-// (Détecter la langue du navigateur ne marche pas : un Brave en anglais avec les langues « en,fr » donnait l'anglais.)
+// Default language, as long as the user has not chosen their own: French.
+// (Detecting the browser language does not work: a Brave in English with the languages "en,fr" gave English.)
 const DEFAULT_TARGET_LANGUAGE = "fr";
 
 function detectBrowserLanguage(done) {
-  // Réparation unique : un ancien défaut remettait la langue en anglais à chaque page, donc la langue enregistrée n'est pas
-  // fiable. On repart du français ; un choix fait ensuite par l'utilisateur est, lui, gardé.
+  // One-time repair: an old default put the language back to English on every page, so the saved language is not
+  // reliable. Start again from French; a choice made afterwards by the user is kept.
   if (twpConfig.get("targetLanguageFixed") !== "yes") {
     twpConfig.set("targetLanguageChosen", "no");
     twpConfig.set("targetLanguage", DEFAULT_TARGET_LANGUAGE);
@@ -58,7 +58,7 @@ function targetLanguage() {
   return twpConfig.get("targetLanguage") || twpLang.fixTLanguageCode(chrome.i18n.getUILanguage()) || "en";
 }
 
-// IA si une clé Groq est enregistrée, sinon le traducteur gratuit.
+// AI if a Groq key is saved, otherwise the free translator.
 function pageService() {
   const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");
   return llm && llm.apiKey ? "llm" : "google";
@@ -93,8 +93,8 @@ function createMenus() {
 
     chrome.contextMenus.create({ id: MENU.dashboard, title: "Dashboard (diagnostics)", contexts: ["all", "action"] });
 
-    // Deux langues : celle dans laquelle on LIT (pages, texte affiché) et celle dans laquelle on ÉCRIT (texte tapé, traduit
-    // pour le destinataire). Elles sont indépendantes : lire en français, écrire en anglais.
+    // Two languages: the one you READ in (pages, displayed text) and the one you WRITE in (typed text, translated
+    // for the recipient). They are independent: read in French, write in English.
     const known = new Set(twpLang.TargetLanguages);
     const addLanguageMenu = (id, prefix, title, current) => {
       const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
@@ -121,7 +121,7 @@ function updatePageMenuTitle(state) {
   chrome.contextMenus.update(MENU.page, { title: pageMenuTitle(state) }, checkedLastError);
 }
 
-// Titre de l'entrée « page » = état de l'onglet affiché.
+// Title of the "page" entry = state of the displayed tab.
 function refreshMenuForTab(tabId) {
   getTabPageState(tabId, updatePageMenuTitle);
 }
@@ -133,7 +133,7 @@ function refreshMenuForActiveTab(windowId) {
   });
 }
 
-// Fenêtre de message (traduction en direct) : une seule fenêtre ; si elle existe déjà on la remet devant.
+// Message window (live translation): a single window; if it already exists it is brought to the front.
 async function openComposer(tabId, draft) {
   const url = chrome.runtime.getURL("/composer/composer.html");
   if (draft) await chrome.storage.local.set({ composerDraft: draft });
@@ -152,8 +152,8 @@ function openKeyPage() {
   chrome.windows.create({ url, type: "popup", width: 520, height: 420 });
 }
 
-// Volet intégré à la page (collé au bord droit), comme le fait DeepL. Si la page ne peut pas l'accueillir
-// (page du navigateur, PDF, script de page absent), on ouvre une fenêtre à la place.
+// Panel built into the page (docked to the right edge), as DeepL does. If the page cannot host it
+// (browser page, PDF, missing page script), a window is opened instead.
 function openDock(tabId, view, draft) {
   const fallback = () => (view === "setup" ? openKeyPage() : openComposer(tabId, draft));
   if (!tabId) return fallback();
@@ -161,15 +161,15 @@ function openDock(tabId, view, draft) {
     chrome.tabs.sendMessage(tabId, { action: "twpDock", view }, { frameId: 0 }, (answer) => {
       if (chrome.runtime.lastError || !answer) fallback();
     });
-    // Volet déjà ouvert : il reprend le nouveau texte.
+    // Panel already open: it takes the new text.
     if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
   };
   if (draft) chrome.storage.local.set({ composerDraft: draft }, send);
   else send();
 }
 
-// Tableau de bord dans une petite fenêtre popup (pas un onglet) ; si elle est déjà ouverte, on la réutilise.
-// `tabId` = la page à examiner.
+// Dashboard in a small popup window (not a tab); if it is already open, it is reused.
+// `tabId` = the page to examine.
 async function openDashboard(tabId) {
   const base = chrome.runtime.getURL("/dashboard/dashboard.html");
   const url = base + (tabId ? "?tab=" + tabId : "");
@@ -192,7 +192,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   } else if (info.menuItemId === MENU.field) {
     chrome.tabs.sendMessage(tab.id, { action: "twpPanel", mode: "field" }, frame, checkedLastError);
   } else if (info.menuItemId === MENU.page) {
-    // La page entière (tous ses cadres) : traduire ou revenir à l'original selon l'état courant.
+    // The whole page (all its frames): translate or go back to the original depending on the current state.
     getTabPageState(tab.id, (state) => {
       chrome.tabs.sendMessage(
         tab.id,
@@ -209,13 +209,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   } else if (String(info.menuItemId).startsWith("twp-write-")) {
     twpConfig.set("writeLanguage", String(info.menuItemId).slice("twp-write-".length));
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {
-    // Le menu est recréé par le rappel de changement de configuration ci-dessous.
+    // The menu is rebuilt by the configuration change callback below.
     twpConfig.set("targetLanguageChosen", "yes");
     twpConfig.set("targetLanguage", String(info.menuItemId).slice("twp-lang-".length));
   }
 });
 
-// Messages des scripts de page (le traducteur de pages en a besoin pour connaître la langue et l'état de l'onglet).
+// Messages from page scripts (the page translator needs them to know the language and the tab state).
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "getMainFramePageLanguageState") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "getCurrentPageLanguageState" }, { frameId: 0 }, (state) => {
@@ -250,7 +250,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === "twpOpenComposer") {
     openDock(sender.tab ? sender.tab.id : null, "composer", request.text);
   } else if (request.action === "twpFallbackWindow") {
-    // Le volet n'a pas pu s'afficher (règles de la page) : fenêtre séparée.
+    // The panel could not be displayed (page rules): separate window.
     if (request.view === "setup") openKeyPage();
     else openComposer(sender.tab ? sender.tab.id : null);
   }
@@ -262,7 +262,7 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab || !tab.active) return;
-  if (changeInfo.status === "loading") updatePageMenuTitle("original"); // une page qui se recharge n'est plus traduite
+  if (changeInfo.status === "loading") updatePageMenuTitle("original"); // a page that reloads is no longer translated
   else if (changeInfo.status === "complete") refreshMenuForTab(tabId);
 });
 
@@ -270,7 +270,7 @@ const start = () => twpConfig.onReady(() => detectBrowserLanguage(createMenus));
 chrome.runtime.onInstalled.addListener(start);
 chrome.runtime.onStartup.addListener(start);
 start();
-// Changement de langue (depuis le menu ou la page de réglage) : titres du menu mis à jour.
+// Language change (from the menu or the settings page): menu titles updated.
 twpConfig.onChanged((name) => {
   if (name === "targetLanguage" || name === "writeLanguage") createMenus();
 });
