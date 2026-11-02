@@ -181,7 +181,7 @@ var twpLlm = (function () {
       " to " +
       nomLangue(tgt) +
       ". Rules: keep every HTML tag and attribute exactly as is (for example <pre>, <a i=0>, </a>, <b>); translate only the human-readable text between tags; " +
-      "do not translate code, URLs, e-mail addresses, numbers or product and brand names; keep the same meaning, tone and punctuation. " +
+      "if a string is already written in the target language, return it exactly as it is; do not translate code, URLs, e-mail addresses, numbers or product and brand names; keep the same meaning, tone and punctuation. " +
       'Reply with ONLY a JSON object of the form {"translations": ["...", "..."]} containing exactly as many strings as the input array, in the same order. No explanation.'
     );
   }

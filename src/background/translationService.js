@@ -906,12 +906,13 @@ const translationService = (function () {
       true,
     );
     const service = getSafeServiceByName(serviceName);
-    return await service.translate(
-      sourceLanguage,
-      targetLanguage,
+    // Pages en plusieurs langues : les blocs déjà dans la langue cible ne sont pas retraduits (voir skipTargetLanguage.js).
+    return await twpSkip.translateSkippingTarget(
       sourceArray2d,
-      dontSaveInPersistentCache,
-      dontSortResults,
+      targetLanguage,
+      (blocks) => service.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults),
+      twpSkip.browserDetect,
+      twpLang.fixTLanguageCode,
     );
   };
 

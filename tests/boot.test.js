@@ -238,9 +238,16 @@ async function demarrerAvecLangues(ui, acceptees, avant) {
 }
 const langueCible = (sandbox) => vm.runInContext('twpConfig.get("targetLanguage")', sandbox);
 
-test("langue par défaut : celle de l'interface du navigateur, même si l'anglais est en tête des langues préférées", async () => {
-  const { sandbox } = await demarrerAvecLangues("fr-CH", ["en-US", "en", "fr-CH", "fr"]);
+test("langue par défaut : la première langue non anglaise, même si l'interface et les langues préférées commencent par l'anglais", async () => {
+  // C'est le cas réel : Brave en anglais avec les langues préférées « en,fr ».
+  const { sandbox } = await demarrerAvecLangues("en", ["en", "fr"]);
   assert.equal(langueCible(sandbox), "fr");
+});
+
+test("langue par défaut : l'interface si elle n'est pas en anglais ; l'anglais seulement s'il n'y a rien d'autre", async () => {
+  assert.equal(langueCible((await demarrerAvecLangues("de", ["en", "fr"])).sandbox), "de");
+  assert.equal(langueCible((await demarrerAvecLangues("fr-CH", ["en-US", "en", "fr-CH", "fr"])).sandbox), "fr");
+  assert.equal(langueCible((await demarrerAvecLangues("en-US", ["en-US", "en"])).sandbox), "en");
 });
 
 test("langue par défaut : à défaut d'interface reconnue, la première langue préférée", async () => {

@@ -8,5 +8,6 @@ importScripts("/lib/platformInfo.js");
 importScripts("/lib/i18n.js");
 importScripts("/background/translationCache.js");
 importScripts("/background/llmService.js");
+importScripts("/background/skipTargetLanguage.js");
 importScripts("/background/translationService.js");
 importScripts("/background/menu.js");

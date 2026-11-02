@@ -15,7 +15,11 @@ L'extension ne garde que l'essentiel : pas de popup, pas de page d'options, pas 
 | partout | **Target language: ...** | sous-menu : choisir la langue de traduction (11 langues courantes cochables) ; « More languages, Groq key... » ouvre la page complète |
 | partout | page « Language and Groq key » (dans le même volet) | la liste de toutes les langues et le champ de la clé Groq (facultatif) |
 
-Zéro réglage : langue cible = langue de l'interface du navigateur au départ (sinon la première langue préférée), puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage) (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
+Zéro réglage : langue cible au départ = la première langue de l'interface ou des langues préférées du navigateur qui n'est pas l'anglais (un navigateur en « en,fr » donne le français ; s'il n'y a que de l'anglais, l'anglais), puis celle qu'on choisit (elle n'est plus jamais écrasée, même après un redémarrage) (une seule pour la page, le panneau et la fenêtre de message), source détectée. Sans clé, le traducteur gratuit d'origine (Google) sert ; avec une clé Groq, l'IA traduit (modèle choisi automatiquement ; menu facultatif dans « Groq key... »). Si l'IA échoue, le panneau retombe sur le gratuit.
+
+## Pages en plusieurs langues
+
+Les blocs de texte déjà écrits dans la langue cible ne sont pas retraduits : leur langue est détectée localement par le navigateur (sans réseau), et seuls les autres partent au traducteur. Une page moitié française, moitié anglaise, traduite en français, n'envoie que l'anglais ; une page déjà entièrement dans la langue cible n'appelle aucun traducteur. Les blocs de moins de 25 caractères ou dont la langue est incertaine sont traduits normalement (l'IA a aussi la consigne de laisser inchangé ce qui est déjà dans la langue cible). Le code est dans `src/background/skipTargetLanguage.js`.
 
 ## Ce qui a été retiré
 
