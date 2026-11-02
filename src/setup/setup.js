@@ -97,17 +97,11 @@
     };
   }
 
-  // In the page's panel: link back to the message window and "ready" signal.
-  if (new URLSearchParams(location.search).get("dock") === "1") {
-    $("#back").hidden = false;
-    $("#back a").onclick = (e) => {
-      e.preventDefault();
-      window.parent.postMessage({ twp: "navigate", view: "composer" }, "*");
-    };
+  // Inside the toolbar popup: Escape closes it.
+  if (window.parent !== window) {
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") window.parent.postMessage({ twp: "close" }, "*");
+      if (e.key === "Escape") window.parent.postMessage({ twp: "close" }, location.origin);
     });
-    window.parent.postMessage({ twp: "ready" }, "*");
   }
 
   twpConfig.onReady(() => {
@@ -118,6 +112,10 @@
       setModels([], llm.model || "");
     }
     showKeyState();
+    // The menu entries "More languages..." and "Groq key..." open the same page on the part they are about.
+    const focus = new URLSearchParams(location.search).get("focus");
+    if (focus === "languages") $("#language").focus();
+    else if (focus === "key") $("#key").focus();
     $("#save").onclick = save;
     $("#remove").onclick = remove;
     $("#load").onclick = loadModels;

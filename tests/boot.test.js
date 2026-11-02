@@ -13,7 +13,8 @@ function fakeChrome() {
   const menus = [];
   const handlers = { onMessage: [], onClicked: [], onInstalled: [], onStartup: [] };
   const storage = {};
-  const state = { dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, alarms: [], reloaded: 0, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [], onAlarm: [] } };
+  const session = {};
+  const state = { popups: [], popupFails: false, dockAnswer: true, tabMessages: [], windowsCreated: [], pageStates: {}, activeTab: 1, alarms: [], reloaded: 0, listeners: { onActivated: [], onUpdated: [], onFocusChanged: [], onAlarm: [] } };
   const chrome = {
     runtime: {
       reload: () => { state.reloaded = (state.reloaded || 0) + 1; },
@@ -30,7 +31,19 @@ function fakeChrome() {
         set: (o, cb) => { Object.assign(storage, o); cb && cb(); return Promise.resolve(); },
         remove: (k, cb) => { delete storage[k]; cb && cb(); },
       },
+      session: {
+        get: (k) => Promise.resolve({ ...session }),
+        set: (o) => { Object.assign(session, o); return Promise.resolve(); },
+        remove: (k) => { delete session[k]; return Promise.resolve(); },
+      },
       onChanged: { addListener: () => {} },
+    },
+    action: {
+      openPopup: () => {
+        if (state.popupFails) return Promise.reject(new Error("openPopup is not available"));
+        state.popups.push({ ...session.popupRequest });
+        return Promise.resolve();
+      },
     },
     i18n: { getUILanguage: () => "fr", getMessage: (n) => n, getAcceptLanguages: (cb) => cb(["fr", "fr-FR", "en"]) },
     contextMenus: {
@@ -76,7 +89,7 @@ function boot() {
   sandbox.importScripts = (...files) => {
     for (const f of files) {
       const filePath = path.join(SRC, f);
-      assert.ok(fs.existsSync(filePath), "fichier manquant : " + f);
+      assert.ok(fs.existsSync(filePath), "missing file: " + f);
       vm.runInContext(fs.readFileSync(filePath, "utf8"), sandbox, { filename: f });
     }
   };
@@ -104,8 +117,8 @@ test("the manifest is valid and only references files that exist", () => {
   ];
   for (const f of files) assert.ok(fs.existsSync(path.join(SRC, f)), "referenced but missing: " + f);
   assert.deepEqual(m.permissions.sort(), ["alarms", "contextMenus", "storage"]);
-  assert.equal(m.action, undefined);
-  assert.equal(m.options_ui, undefined, "the dashboard opens as a popup, not as an options page");
+  assert.equal(m.action.default_popup, "popup/popup.html", "the toolbar icon opens the popup (message window, settings, dashboard)");
+  assert.equal(m.options_ui, undefined, "no separate options page: the settings are a view of the popup");
   assert.equal(m.commands, undefined);
 });
 
@@ -143,23 +156,56 @@ test("choosing a language in the menu changes the target language everywhere and
   assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
 });
 
-test("\"Message window\" opens in a panel of the page, and in a window only if the page cannot host it", async () => {
+test("\"Message window\", \"Groq key...\", \"More languages...\" and \"Dashboard\" all open the toolbar popup", async () => {
+  const { sandbox, handlers, state, storage } = boot();
+  loadBackground(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const click = async (id) => {
+    handlers.onClicked.forEach((f) => f({ menuItemId: id, frameId: 0 }, { id: 7 }));
+    await new Promise((r) => setTimeout(r, 10));
+    return state.popups.at(-1);
+  };
+  assert.deepEqual(await click("twp-composer"), { view: "translate", focus: undefined });
+  assert.deepEqual(await click("twp-key"), { view: "settings", focus: "key" });
+  assert.deepEqual(await click("twp-languages-read"), { view: "settings", focus: "languages" });
+  assert.deepEqual(await click("twp-languages-write"), { view: "settings", focus: "languages" });
+  assert.deepEqual(await click("twp-dashboard"), { view: "dashboard", focus: undefined });
+  assert.equal(state.popups.length, 5);
+  assert.equal(state.windowsCreated.length, 0, "no separate window when the popup can open");
+  assert.ok(!state.tabMessages.some((m) => /dock/i.test(JSON.stringify(m.msg))), "nothing is injected in the page");
+
+  // "Window" button of the floating panel: the text written in the field goes to the message view
+  handlers.onMessage.forEach((f) => f({ action: "twpOpenComposer", text: "Bonjour" }, { tab: { id: 7 } }, () => {}));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(storage.composerDraft, "Bonjour");
+  assert.equal(state.popups.at(-1).view, "translate");
+});
+
+test("when the toolbar popup cannot be opened, the same page opens in a small window", async () => {
   const { sandbox, handlers, state } = boot();
   loadBackground(sandbox);
   await new Promise((r) => setTimeout(r, 50));
   handlers.onInstalled.forEach((f) => f());
-  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-composer", frameId: 0 }, { id: 7 }));
-  assert.deepEqual(JSON.parse(JSON.stringify(state.tabMessages.at(-1))), { id: 7, msg: { action: "twpDock", view: "composer" } });
-  assert.equal(state.windowsCreated.length, 0, "no window when the panel answers");
-
-  state.dockAnswer = undefined; // page that cannot receive the panel (browser page, PDF...)
+  state.popupFails = true;
   handlers.onClicked.forEach((f) => f({ menuItemId: "twp-composer", frameId: 0 }, { id: 7 }));
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.windowsCreated.length, 1);
-  assert.match(state.windowsCreated[0].url, /composer[/]composer[.]html/);
+  assert.match(state.windowsCreated[0].url, /popup[/]popup[.]html$/);
+  assert.equal(state.windowsCreated[0].type, "popup");
+});
 
-  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-key", frameId: 0 }, { id: 7 }));
-  assert.match(state.windowsCreated.at(-1).url, /setup[/]setup[.]html/);
+test("\"More languages...\" is separate from \"Groq key...\", which is a top-level entry", async () => {
+  const { sandbox, menus, handlers } = boot();
+  loadBackground(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  const byId = (id) => menus.find((m) => m.id === id);
+  assert.equal(byId("twp-key").title, "Groq key...");
+  assert.equal(byId("twp-key").parentId, undefined, "top-level entry");
+  assert.equal(byId("twp-languages-read").parentId, "twp-lang");
+  assert.equal(byId("twp-languages-write").parentId, "twp-write");
+  assert.equal(byId("twp-languages-write").title, "More languages...");
 });
 
 test("the selection bubble is on by default and can be turned off from the menu", async () => {

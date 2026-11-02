@@ -2,6 +2,12 @@
 
 // Dashboard (popup window): summary, state of the chosen page, log. The calculations are in metrics.js.
 const $ = (id) => document.getElementById(id);
+// Inside the toolbar popup: Escape closes it.
+if (window.parent !== window) {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") window.parent.postMessage({ twp: "close" }, location.origin);
+  });
+}
 const tabId = Number(new URLSearchParams(location.search).get("tab")) || null;
 let events = [];
 let summary = null;

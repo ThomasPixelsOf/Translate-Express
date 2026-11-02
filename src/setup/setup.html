@@ -9,14 +9,16 @@
 </head>
 
 <body>
-  <p id="back" hidden><a href="#">&larr; Message window</a></p>
-  <h1>Languages</h1>
-  <label for="language">I read in (pages and selected text are translated into)</label>
-  <select id="language"></select>
-  <label for="writeLanguage">I write in (what I type is translated into)</label>
-  <select id="writeLanguage"></select>
+  <section id="languages-section">
+    <h1>Languages</h1>
+    <label for="language">I read in (pages and selected text are translated into)</label>
+    <select id="language"></select>
+    <label for="writeLanguage">I write in (what I type is translated into)</label>
+    <select id="writeLanguage"></select>
+  </section>
 
-  <h1 style="margin-top: 28px;">Groq key (optional)</h1>
+  <section id="key-section">
+  <h1>Groq key (optional)</h1>
   <p>Paste your Groq API key: the AI becomes your translator. The model is chosen automatically.
     The key stays in this browser. The text you translate is sent to Groq.</p>
 
@@ -33,6 +35,7 @@
     <button id="save" class="primary">Save</button>
     <button id="remove">Remove the key</button>
   </div>
+  </section>
   <p id="status" aria-live="polite"></p>
 
   <script src="/lib/checkedLastError.js"></script>

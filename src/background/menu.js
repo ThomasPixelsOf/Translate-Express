@@ -12,6 +12,8 @@ const COMMON_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "ja", 
 
 const MENU = {
   dashboard: "twp-dashboard",
+  languagesRead: "twp-languages-read",
+  languagesWrite: "twp-languages-write",
   lang: "twp-lang",
   write: "twp-write",
   bubble: "twp-bubble",
@@ -87,16 +89,17 @@ function createMenus() {
       id: MENU.bubble,
       type: "checkbox",
       checked: twpConfig.get("showTranslateSelectedButton") !== "no",
-      title: "Show a bubble when I select text",
+      title: "Show the logo when I select text",
       contexts: ["all"],
     });
 
     chrome.contextMenus.create({ id: MENU.dashboard, title: "Dashboard (diagnostics)", contexts: ["all", "action"] });
+    chrome.contextMenus.create({ id: MENU.key, title: "Groq key...", contexts: ["all", "action"] });
 
     // Two languages: the one you READ in (pages, displayed text) and the one you WRITE in (typed text, translated
     // for the recipient). They are independent: read in French, write in English.
     const known = new Set(twpLang.TargetLanguages);
-    const addLanguageMenu = (id, prefix, title, current) => {
+    const addLanguageMenu = (id, prefix, title, current, moreId) => {
       const choices = [...new Set([current, ...COMMON_LANGUAGES])].filter((code) => known.has(code));
       chrome.contextMenus.create({ id, title: title + twpLang.codeToLanguage(current), contexts: ["all"] });
       for (const code of choices) {
@@ -109,10 +112,10 @@ function createMenus() {
           contexts: ["all"],
         });
       }
+      chrome.contextMenus.create({ id: moreId, parentId: id, title: "More languages...", contexts: ["all"] });
     };
-    addLanguageMenu(MENU.lang, "twp-lang-", "Read in: ", targetLanguage());
-    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage());
-    chrome.contextMenus.create({ id: MENU.key, parentId: MENU.write, title: "More languages, Groq key...", contexts: ["all"] });
+    addLanguageMenu(MENU.lang, "twp-lang-", "Read in: ", targetLanguage(), MENU.languagesRead);
+    addLanguageMenu(MENU.write, "twp-write-", "Write in: ", writeLanguage(), MENU.languagesWrite);
     refreshMenuForActiveTab();
   });
 }
@@ -133,58 +136,23 @@ function refreshMenuForActiveTab(windowId) {
   });
 }
 
-// Message window (live translation): a single window; if it already exists it is brought to the front.
-async function openComposer(tabId, draft) {
-  const url = chrome.runtime.getURL("/composer/composer.html");
+// Everything opens in the toolbar popup, like a VPN extension: "translate" (message window), "settings" or "dashboard".
+// A popup cannot take parameters, so the view to show is left in session storage for popup/popup.js.
+async function openPopup(view, { focus, draft } = {}) {
   if (draft) await chrome.storage.local.set({ composerDraft: draft });
-  const windows = await chrome.windows.getAll({ populate: true });
-  const existing = windows.find((w) => w.type === "popup" && w.tabs && w.tabs.some((t) => t.url && t.url.startsWith(url)));
-  if (existing) {
-    await chrome.windows.update(existing.id, { focused: true });
-    if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
-    return;
+  await chrome.storage.session.set({ popupRequest: { view, focus } });
+  try {
+    await chrome.action.openPopup();
+  } catch (e) {
+    // openPopup is not available here (no focused window...): the same page in a small window.
+    await chrome.windows.create({ url: chrome.runtime.getURL("/popup/popup.html"), type: "popup", width: 580, height: 620 });
   }
-  await chrome.windows.create({ url: url + (tabId ? "?tab=" + tabId : ""), type: "popup", width: 900, height: 520 });
-}
-
-function openKeyPage() {
-  const url = chrome.runtime.getURL("/setup/setup.html");
-  chrome.windows.create({ url, type: "popup", width: 520, height: 420 });
-}
-
-// Panel built into the page (docked to the right edge), as DeepL does. If the page cannot host it
-// (browser page, PDF, missing page script), a window is opened instead.
-function openDock(tabId, view, draft) {
-  const fallback = () => (view === "setup" ? openKeyPage() : openComposer(tabId, draft));
-  if (!tabId) return fallback();
-  const send = () => {
-    chrome.tabs.sendMessage(tabId, { action: "twpDock", view }, { frameId: 0 }, (answer) => {
-      if (chrome.runtime.lastError || !answer) fallback();
-    });
-    // Panel already open: it takes the new text.
-    if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
-  };
-  if (draft) chrome.storage.local.set({ composerDraft: draft }, send);
-  else send();
-}
-
-// Dashboard in a small popup window (not a tab); if it is already open, it is reused.
-// `tabId` = the page to examine.
-async function openDashboard(tabId) {
-  const base = chrome.runtime.getURL("/dashboard/dashboard.html");
-  const url = base + (tabId ? "?tab=" + tabId : "");
-  const wins = await chrome.windows.getAll({ populate: true, windowTypes: ["popup"] });
-  const existing = wins.find((w) => (w.tabs || []).some((t) => t.url && t.url.startsWith(base)));
-  if (existing) {
-    await chrome.tabs.update(existing.tabs[0].id, { url });
-    await chrome.windows.update(existing.id, { focused: true });
-  } else {
-    await chrome.windows.create({ url, type: "popup", width: 560, height: 760 });
-  }
+  // Popup already showing the message view: it takes the new text.
+  if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === MENU.dashboard) return openDashboard(tab && tab.id);
+  if (info.menuItemId === MENU.dashboard) return openPopup("dashboard");
   if (!tab) return;
   const frame = { frameId: info.frameId || 0 };
   if (info.menuItemId === MENU.selection) {
@@ -201,11 +169,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       );
     });
   } else if (info.menuItemId === MENU.composer) {
-    openDock(tab.id, "composer");
+    openPopup("translate");
   } else if (info.menuItemId === MENU.bubble) {
     twpConfig.set("showTranslateSelectedButton", info.checked ? "yes" : "no");
   } else if (info.menuItemId === MENU.key) {
-    openDock(tab.id, "setup");
+    openPopup("settings", { focus: "key" });
+  } else if (info.menuItemId === MENU.languagesRead || info.menuItemId === MENU.languagesWrite) {
+    openPopup("settings", { focus: "languages" });
   } else if (String(info.menuItemId).startsWith("twp-write-")) {
     twpConfig.set("writeLanguage", String(info.menuItemId).slice("twp-write-".length));
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {
@@ -248,11 +218,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === "thisFrameIsInFocus") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "anotherFrameIsInFocus" }, checkedLastError);
   } else if (request.action === "twpOpenComposer") {
-    openDock(sender.tab ? sender.tab.id : null, "composer", request.text);
-  } else if (request.action === "twpFallbackWindow") {
-    // The panel could not be displayed (page rules): separate window.
-    if (request.view === "setup") openKeyPage();
-    else openComposer(sender.tab ? sender.tab.id : null);
+    openPopup("translate", { draft: request.text });
   }
 });
 

@@ -6,12 +6,12 @@ It is a fork of [TWP - Translate Web Pages](https://github.com/FilipePS/Traduzir
 
 ## What it does
 
-- **Right-click is the only entry point.** Translate selection, translate what you are writing, translate this page / show the original, message window, dashboard.
+- **Right-click menu**: translate selection, translate what you are writing, translate this page / show the original, message window, Groq key, dashboard. The extension's icon opens the same popup.
 - **Selection bubble and small floating panel** next to the selected text (like DeepL), with a copy button, a "Translate again" button and, in text fields, a Replace button. Translations already obtained are kept in memory.
 - **Two languages**: "Read in" (default French) for text you read, "Write in" (default English) for text you write. Both are remembered.
 - **Complete page translation**: dynamic content, text changed in place, shadow DOM, tall blocks, `<code>` that contains prose, pages that mix languages. Visible text first, the rest in the background.
 - **Optional AI translation with Groq**: paste a Groq API key (stored only in the extension's local storage) and pick a model, or leave the default. Without a key, it uses Google Translate. A token budget keeps within the free tier's limit and falls back to Google when Groq is saturated.
-- **Diagnostics dashboard** (popup window): why a page is slow or incomplete, with a copyable report.
+- **Toolbar popup** (like a VPN extension): the message window, the settings (languages, Groq key) and a diagnostics dashboard that shows why a page is slow or incomplete, with a copyable report.
 - Dark theme everywhere.
 
 ## Install (unpacked)

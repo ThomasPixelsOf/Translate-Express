@@ -13,7 +13,7 @@ const DEV_FILES = [
   "/background/translationService.js", "/bg.js", "/composer/composer.css", "/composer/composer.html", "/composer/composer.js",
   "/contentScript/css/showOriginal.css", "/contentScript/pageTranslator.js", "/contentScript/panel.js", "/contentScript/showOriginal.js",
   "/lib/XMLHttpRequestShim.js", "/lib/checkedLastError.js", "/lib/config.js", "/lib/i18n.js", "/lib/languages.js", "/lib/platformInfo.js",
-  "/dashboard/dashboard.css", "/dashboard/dashboard.html", "/dashboard/dashboard.js", "/dashboard/metrics.js",
+  "/popup/popup.css", "/popup/popup.html", "/popup/popup.js", "/dashboard/dashboard.css", "/dashboard/dashboard.html", "/dashboard/dashboard.js", "/dashboard/metrics.js",
   "/lib/stuff.js", "/manifest.json", "/setup/setup.css", "/setup/setup.html", "/setup/setup.js",
 ];
 const DEV_ALARM = "twp-dev-reload";

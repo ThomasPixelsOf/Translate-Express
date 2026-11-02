@@ -340,90 +340,6 @@
     }
   });
 
-  // ---- panel docked to the right edge (message window and settings) ----
-  let dock = null; // { host, frame, readyTimer }
-  const DOCK_WIDTH_KEY = "twpDockWidth";
-
-  function closeDock() {
-    if (!dock) return;
-    clearTimeout(dock.readyTimer);
-    dock.host.remove();
-    dock = null;
-  }
-
-  function openDockPanel(view) {
-    if (window !== window.top) return false;
-    closeDock();
-    const host = document.createElement("div");
-    host.setAttribute("data-twp-dock", "");
-    host.style.cssText = "all: initial;";
-    const root = host.attachShadow({ mode: "open" });
-    let width = 400;
-    try {
-      width = Math.min(Math.max(Number(localStorage.getItem(DOCK_WIDTH_KEY)) || 400, 320), Math.floor(window.innerWidth * 0.8));
-    } catch (e) {}
-    root.innerHTML = `<style>
-      .dock { position: fixed; top: 0; right: 0; height: 100vh; width: ${width}px; z-index: 2147483647; display: flex; background: #1c1c1e;
-        box-shadow: -4px 0 18px rgba(0,0,0,.28); border-left: 1px solid #3a3a3e; }
-      .grip { width: 6px; cursor: ew-resize; background: transparent; flex: none; }
-      .grip:hover { background: rgba(15,98,254,.35); }
-      iframe { flex: 1; border: 0; min-width: 0; height: 100%; color-scheme: dark; }
-      .x { position: absolute; top: 6px; right: 8px; z-index: 1; width: 26px; height: 26px; border-radius: 13px; border: 0; cursor: pointer;
-        background: rgba(128,128,128,.25); color: inherit; font: 16px/1 system-ui, sans-serif; }
-    </style>
-    <div class="dock"><div class="grip" title="Drag to resize"></div>
-      <iframe title="Translation"></iframe><button class="x" aria-label="Close">&times;</button></div>`;
-    const frame = root.querySelector("iframe");
-    const dockEl = root.querySelector(".dock");
-    const page = view === "setup" ? "/setup/setup.html" : "/composer/composer.html";
-    frame.src = chrome.runtime.getURL(page + "?dock=1");
-    root.querySelector(".x").addEventListener("click", closeDock);
-
-    // Resizing with the mouse; the chosen width is remembered.
-    root.querySelector(".grip").addEventListener("mousedown", (down) => {
-      down.preventDefault();
-      frame.style.pointerEvents = "none";
-      const move = (e) => {
-        width = Math.min(Math.max(window.innerWidth - e.clientX, 320), Math.floor(window.innerWidth * 0.8));
-        dockEl.style.width = width + "px";
-      };
-      const up = () => {
-        document.removeEventListener("mousemove", move, true);
-        document.removeEventListener("mouseup", up, true);
-        frame.style.pointerEvents = "";
-        try { localStorage.setItem(DOCK_WIDTH_KEY, String(width)); } catch (e) {}
-      };
-      document.addEventListener("mousemove", move, true);
-      document.addEventListener("mouseup", up, true);
-    });
-
-    document.documentElement.appendChild(host);
-    dock = { host, frame, view, readyTimer: null };
-    // If the page forbids showing the panel (security headers), it will never say "ready": separate window.
-    dock.readyTimer = setTimeout(() => {
-      closeDock();
-      try { chrome.runtime.sendMessage({ action: "twpFallbackWindow", view }); } catch (e) {}
-    }, 2500);
-    return true;
-  }
-
-  // Messages coming from the panel (the panel's page is in a frame of another origin).
-  window.addEventListener("message", (e) => {
-    if (!dock || e.source !== dock.frame.contentWindow || !e.data || typeof e.data !== "object") return;
-    if (e.data.twp === "ready") {
-      clearTimeout(dock.readyTimer);
-    } else if (e.data.twp === "close") {
-      closeDock();
-    } else if (e.data.twp === "navigate" && (e.data.view === "setup" || e.data.view === "composer")) {
-      dock.frame.src = chrome.runtime.getURL((e.data.view === "setup" ? "/setup/setup.html" : "/composer/composer.html") + "?dock=1");
-      clearTimeout(dock.readyTimer);
-    } else if (e.data.twp === "insert" && typeof e.data.text === "string") {
-      const el = field && document.contains(field) ? field : null;
-      if (el) insertAtCaret(el, e.data.text);
-      dock.frame.contentWindow.postMessage({ twp: "inserted", ok: !!el }, "*");
-    }
-  });
-
   // ---- bubble on the selected text: a click opens the panel with the translation ----
   let bubble = null; // { host, el, timer }
   const BUBBLE_MIN_CHARS = 2;
@@ -461,7 +377,7 @@
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const anchor = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
     // Not in our own panels; not in a password field.
-    if (anchor && anchor.closest && (anchor.closest("[data-twp-panel],[data-twp-dock],[data-twp-bubble]") || anchor.closest("input[type=password]"))) return null;
+    if (anchor && anchor.closest && (anchor.closest("[data-twp-panel],[data-twp-bubble]") || anchor.closest("input[type=password]"))) return null;
     const text = sel.toString().trim();
     if (text.length < BUBBLE_MIN_CHARS) return null;
     const range = sel.getRangeAt(0);
@@ -505,7 +421,7 @@
       // The selection must survive the click on the bubble.
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {
-        // The small panel opens just below the selected text (the "Window" button opens the page's docked panel).
+        // The small panel opens just below the selected text (the "Window" button opens the message window).
         const info = readSelection() || bubble.info;
         anchorOverride = bubble.anchor || null;
         if (info.field) {
@@ -620,8 +536,6 @@
         if (!field) mode = "selection"; // no field found: translate the selection if there is one
       }
       show(true);
-    } else if (request.action === "twpDock") {
-      sendResponse(openDockPanel(request.view));
     } else if (request.action === "twpInsertText") {
       // Insertion requested by the message window ("Insert in the page").
       const el = field && document.contains(field) ? field : null;

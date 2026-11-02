@@ -9,8 +9,6 @@
   const KEY_TONE = "composerTone";
 
   const params = new URLSearchParams(location.search);
-  const docked = params.get("dock") === "1"; // shown in the page's panel (otherwise: separate window)
-  const toParent = (message) => window.parent.postMessage(message, "*");
   const openerTabId = params.has("tab") ? Number(params.get("tab")) : null;
 
   let timer = null;
@@ -149,27 +147,7 @@
       }
       setStatus("Copied");
     };
-    if (docked) {
-      // In the panel: the page itself writes into the page's field.
-      $("#insert").hidden = false;
-      $("#insert").onclick = () => {
-        const text = $("#output").value;
-        if (text) toParent({ twp: "insert", text });
-      };
-      window.addEventListener("message", (e) => {
-        if (e.source === window.parent && e.data && e.data.twp === "inserted") setStatus(e.data.ok ? "Inserted" : "No text field found in the page: use Copy", !e.data.ok);
-      });
-      document.body.classList.add("docked");
-      $("#settings").hidden = false;
-      $("#settings").onclick = (e) => {
-        e.preventDefault();
-        toParent({ twp: "navigate", view: "setup" });
-      };
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") toParent({ twp: "close" });
-      });
-      toParent({ twp: "ready" });
-    } else if (openerTabId !== null) {
+    if (openerTabId !== null) {
       $("#insert").hidden = false;
       $("#insert").onclick = () => {
         const text = $("#output").value;
@@ -180,6 +158,17 @@
         });
       };
     }
+  // Inside the toolbar popup: Escape closes it.
+  if (window.parent !== window) {
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") window.parent.postMessage({ twp: "close" }, location.origin);
+    });
+  }
+    // "add a Groq key": switch the popup to its settings view.
+    $("#goKey").onclick = (e) => {
+      e.preventDefault();
+      window.parent.postMessage({ twp: "view", view: "settings", focus: "key" }, location.origin);
+    };
     // Ctrl+Enter: copy the translation
     document.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {

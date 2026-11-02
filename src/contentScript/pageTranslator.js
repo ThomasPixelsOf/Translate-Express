@@ -499,7 +499,7 @@ Promise.all([twpConfig.onReady(), getTabHostName()]).then(function (_) {
     for (const node of nodes) {
       const parent = node.parentElement;
       if (!parent) continue;
-      if (parent.closest("script,style,noscript,[data-twp-panel],[data-twp-dock],[data-twp-bubble]")) continue;
+      if (parent.closest("script,style,noscript,[data-twp-panel],[data-twp-bubble]")) continue;
       if (writtenText.has(node)) {
         const before = originalOf.get(node);
         if (before !== undefined && before.trim() === node.nodeValue.trim() && /[A-Za-z]{3,}/.test(before)) {

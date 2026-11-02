@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+  --bg: #1c1c1e;
+  --panel: #26262a;
+  --line: #3a3a3e;
+  --fg: #f2f2f4;
+  --muted: #9a9aa0;
+  --accent: #4589ff;
+}
+
+* { box-sizing: border-box; }
+
+/* The toolbar popup is at most 800 x 600. */
+html, body {
+  width: 560px;
+  height: 580px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+nav { display: flex; gap: 4px; padding: 8px 10px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+nav button {
+  font: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+nav button:hover { color: var(--fg); }
+nav button.on { color: var(--fg); background: var(--bg); border-color: var(--line); }
+
+iframe { flex: 1; width: 100%; border: 0; background: var(--bg); }

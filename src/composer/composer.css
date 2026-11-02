@@ -75,10 +75,14 @@ select { max-width: 190px; }
   main section + section { border-left: 0; border-top: 1px solid var(--line); }
 }
 
-#settings { color: var(--accent); font-size: 12px; text-decoration: none; }
-body.docked header { padding-right: 44px; }
 
 select { color-scheme: dark; }
 option, optgroup { background: var(--bg); color: var(--fg); }
 optgroup { font-weight: 700; }
 option { font-weight: 400; }
+
+/* In the toolbar popup (narrow): the two texts are stacked. */
+@media (max-width: 700px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  main section + section { border-left: 0; border-top: 1px solid var(--line); }
+}

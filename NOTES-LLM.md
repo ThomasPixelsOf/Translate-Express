@@ -3,7 +3,7 @@
 A fork of TWP (Translate Web Pages, branch `chrome-mv3`, 10.2.5.0) with its own version numbering: 1.0.0. The name "TWP" now only designates the original code.
 
 Built on the `chrome-mv3` branch (version 10.2.5.0) of https://github.com/FilipePS/Traduzir-paginas-web. The first commit of this repository is the exact state of the original project; the following ones are our changes.
-The extension keeps only the essentials: no browser popup, no options page, no keyboard shortcuts, no floating button. Everything is done from the **right-click menu**.
+The extension keeps only the essentials: no options page, no keyboard shortcuts, no floating button. Selecting and translating is done from the **right-click menu**; the message window, the settings and the dashboard live in a single **toolbar popup** (click the extension's icon, like a VPN extension), which the menu entries also open.
 
 ## The right-click menu
 
@@ -13,11 +13,12 @@ The extension keeps only the essentials: no browser popup, no options page, no k
 | on selected text | **Translate selection** | a panel opens near the selection with the translation (Copy) |
 | in an input field | **Translate what I'm writing** | panel with the live translation of what you write; **Replace** replaces the field's text (or the selected part) |
 | on the page | **Translate this page to ...** / **Show original page** | translates the whole page, then goes back to the original |
-| everywhere | **Message window (live translation)** | panel docked to the right edge of the page (width adjustable with the mouse, Escape or x to close): you write, the translation arrives live; Copy (Ctrl+Enter), Insert in the page, Settings link. A separate window only opens if the page forbids the panel (browser page, PDF, site security rules) |
+| everywhere | **Message window (live translation)** | opens the toolbar popup on its **Translate** view: you write, the translation arrives live; Copy (Ctrl+Enter), Insert in the page (into the field of the page you came from), link to the settings. Escape closes the popup |
 | everywhere | **Read in: ...** | submenu: the language you READ in (pages and displayed text); 11 common languages, French by default |
-| everywhere | **Write in: ...** | submenu: the language you WRITE in (typed text, translated for the recipient); English by default; "More languages, Groq key..." opens the full list |
-| everywhere | **Dashboard (diagnostics)** | popup window with the diagnostics (see below) |
-| everywhere | "Language and Groq key" page (in the same panel) | the list of all languages and the (optional) Groq key field |
+| everywhere | **Write in: ...** | submenu: the language you WRITE in (typed text, translated for the recipient); English by default; each submenu ends with "More languages..." (opens the Settings view on the language lists) |
+| everywhere | **Groq key...** | opens the Settings view with the key field focused |
+| everywhere | **Dashboard (diagnostics)** | opens the popup on its **Dashboard** view (see below) |
+| toolbar icon | the popup | three tabs: **Translate** (message window), **Settings** (all languages and the optional Groq key) and **Dashboard**. If the browser cannot open the popup from the menu, the same page opens in a small window |
 
 Zero configuration: the default target language is French, then the one you choose (it is never overwritten again, even after a restart), source detected. Without a key, the original free translator (Google) is used; with a Groq key, the AI translates (model chosen automatically; optional menu in "Groq key..."). If the AI fails, the panel falls back to the free one.
 
@@ -87,7 +88,7 @@ Blocks of text already written in the target language are not translated again: 
 
 ## Diagnostics and dashboard
 
-A log (last 1,000 events, session storage) records the requests to the AI (duration, budget wait, tokens, 429), the translation calls, the sends and results of the page, and the guards (stuck pieces, detected stalls). Setting `diagnostics` = "no" turns it off. The dashboard opens in a popup window (right-click, "Dashboard (diagnostics)", also in the toolbar icon menu): a summary with findings in plain words, the state of the page (why each text is not translated, including text written back unchanged), a filterable log, and a "Copy report" button. Calculations are in `src/dashboard/metrics.js` (tested).
+A log (last 1,000 events, session storage) records the requests to the AI (duration, budget wait, tokens, 429), the translation calls, the sends and results of the page, and the guards (stuck pieces, detected stalls). Setting `diagnostics` = "no" turns it off. The dashboard is a view of the toolbar popup (the **Dashboard** tab, or right-click, "Dashboard (diagnostics)"): a summary with findings in plain words, the state of the page (why each text is not translated, including text written back unchanged), a filterable log, and a "Copy report" button. Calculations are in `src/dashboard/metrics.js` (tested).
 
 ## Security of the API key
 
@@ -123,15 +124,15 @@ Popup, options page, shortcuts, floating button, translation on hover, text to s
 | `src/background/devReload.js` | automatic reload during development |
 | `src/contentScript/pageTranslator.js`, `showOriginal.js` | original page translation (TWP), with our fixes |
 | `src/contentScript/panel.js` | the panel and bubble (selection and input fields) |
-| `src/composer/` | the message window |
-| `src/setup/` | the "Groq key..." page |
+| `src/popup/` | the toolbar popup: tabs that show the three pages below |
+| `src/composer/`, `src/setup/`, `src/dashboard/` | the Translate, Settings and Dashboard views of the popup |
 | `src/lib/` | configuration, languages, original utilities |
 | `tests/` | tests without network: `node --test "tests/*.test.js"` |
 
 ## Usage
 
 1. Brave or Chrome: `brave://extensions`, developer mode, "Load unpacked", the `src` folder of this repository.
-2. Right-click, **Groq key...**, paste the `gsk_...` key, Save.
+2. Click the extension's icon, **Settings** tab (or right-click, **Groq key...**), paste the `gsk_...` key, Save.
 3. Right-click on a page, a text or a field.
 
 The key stays in the extension's storage; it is only sent to Groq. The translated text goes to Groq: avoid private or company pages.
