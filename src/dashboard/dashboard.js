@@ -37,8 +37,7 @@ function renderPage() {
   const r = pageReport;
   const el = $("page");
   const scan = '<button id="scan">Scan now</button>';
-  if (!tabId) return (el.innerHTML = '<p class="sub">Open the dashboard from a page (right-click, Dashboard) to inspect it.</p>');
-  if (!r || r.error) return (el.innerHTML = "<p>No report from the page" + (r && r.error ? ": " + esc(r.error) : " (reload it with F5, or it is a protected page)") + ".</p>" + scan);
+  if (!r || r.error) return (el.innerHTML = "<p>No report from the page" + (r && r.error ? ": " + esc(r.error) : "") + ".</p>" + scan);
   el.innerHTML =
     "<p>" + esc(r.host) + " - state: <b>" + esc(r.pageState) + "</b>, service " + esc(r.service) + ", target " + esc(r.target) + " " + scan + "</p>" +
     '<div class="cards">' + Object.entries(r.counts || {}).map(([k, v]) => card(v, k)).join("") + "</div>" +
@@ -57,7 +56,7 @@ async function load() {
   const res = await send({ action: "twpDiagGet" });
   events = (res && res.events) || [];
   summary = twpMetrics.summarize(events);
-  pageReport = tabId ? await send({ action: "twpDiagPageReport", tabId }) : null;
+  pageReport = await send({ action: "twpDiagPageReport", tabId });
   $("status").textContent = (res && res.enabled === false ? "Logging is off (setting \"diagnostics\"). " : "") + events.length + " events kept (last 1000).";
   renderSummary();
   renderPage();

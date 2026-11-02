@@ -151,6 +151,7 @@ var twpMetrics = (function () {
         list.forEach((x) => out.push("  - \"" + x.text + "\" in " + x.path + (x.why ? " (" + x.why + ")" : "")));
       }
     }
+    if (pageReport && pageReport.error) out.push("", "## State of the current page: unavailable - " + pageReport.error);
     out.push("", "## Last events");
     events.slice(-60).forEach((e) => out.push(eventLine(e)));
     return out.join("\n");

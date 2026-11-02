@@ -83,19 +83,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse(true);
   } else if (request.action === "twpDiagPageReport") {
     // L'état détaillé d'une page est connu de son script de page : on lui pose la question (cadre principal).
-    chrome.tabs.sendMessage(request.tabId, { action: "twpPageReport" }, { frameId: 0 }, (report) => {
-      void chrome.runtime.lastError;
-      sendResponse(report || null);
+    pageTabId(request.tabId).then((tabId) => {
+      if (!tabId) return sendResponse({ error: "no page to inspect: open the dashboard from a normal page" });
+      chrome.tabs.sendMessage(tabId, { action: "twpPageReport" }, { frameId: 0 }, (report) => {
+        const err = chrome.runtime.lastError;
+        sendResponse(report || { error: "the page does not answer (press F5 on it once, or it is a protected page)" + (err ? " [" + err.message + "]" : "") });
+      });
     });
     return true;
   } else if (request.action === "twpDiagScan") {
-    chrome.tabs.sendMessage(request.tabId, { action: "twpPageScan" }, { frameId: 0 }, (ok) => {
-      void chrome.runtime.lastError;
-      sendResponse(!!ok);
+    pageTabId(request.tabId).then((tabId) => {
+      if (!tabId) return sendResponse(false);
+      chrome.tabs.sendMessage(tabId, { action: "twpPageScan" }, { frameId: 0 }, (ok) => {
+        void chrome.runtime.lastError;
+        sendResponse(!!ok);
+      });
     });
     return true;
   }
 });
+
+// Onglet à examiner : celui demandé, sinon la page normale ouverte au premier plan la plus récemment utilisée
+// (le tableau de bord est une fenêtre popup : « l'onglet actif » serait lui-même).
+async function pageTabId(wanted) {
+  if (wanted) return wanted;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, windowType: "normal" });
+    tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    return tabs[0] && tabs[0].id;
+  } catch (e) {
+    return undefined;
+  }
+}
 
 function safeHost(url) {
   try {
