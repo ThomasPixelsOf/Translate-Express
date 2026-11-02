@@ -84,3 +84,6 @@ select { max-width: 190px; }
   main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
   main section + section { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+#settings { color: var(--accent); font-size: 12px; text-decoration: none; }
+body.docked header { padding-right: 44px; }

@@ -9,6 +9,8 @@
   const KEY_TONE = "composerTone";
 
   const params = new URLSearchParams(location.search);
+  const docked = params.get("dock") === "1"; // affiché dans le volet de la page (sinon : fenêtre séparée)
+  const toParent = (message) => window.parent.postMessage(message, "*");
   const openerTabId = params.has("tab") ? Number(params.get("tab")) : null;
 
   let timer = null;
@@ -162,7 +164,27 @@
       }
       setStatus("Copied");
     };
-    if (openerTabId !== null) {
+    if (docked) {
+      // Dans le volet : on écrit dans le champ de la page par la page elle-même.
+      $("#insert").hidden = false;
+      $("#insert").onclick = () => {
+        const text = $("#output").value;
+        if (text) toParent({ twp: "insert", text });
+      };
+      window.addEventListener("message", (e) => {
+        if (e.source === window.parent && e.data && e.data.twp === "inserted") setStatus(e.data.ok ? "Inserted" : "No text field found in the page: use Copy", !e.data.ok);
+      });
+      document.body.classList.add("docked");
+      $("#settings").hidden = false;
+      $("#settings").onclick = (e) => {
+        e.preventDefault();
+        toParent({ twp: "navigate", view: "setup" });
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") toParent({ twp: "close" });
+      });
+      toParent({ twp: "ready" });
+    } else if (openerTabId !== null) {
       $("#insert").hidden = false;
       $("#insert").onclick = () => {
         const text = $("#output").value;

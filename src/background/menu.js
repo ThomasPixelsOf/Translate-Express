@@ -90,6 +90,22 @@ function openKeyPage() {
   chrome.windows.create({ url, type: "popup", width: 520, height: 420 });
 }
 
+// Volet intégré à la page (collé au bord droit), comme le fait DeepL. Si la page ne peut pas l'accueillir
+// (page du navigateur, PDF, script de page absent), on ouvre une fenêtre à la place.
+function openDock(tabId, view, draft) {
+  const fallback = () => (view === "setup" ? openKeyPage() : openComposer(tabId, draft));
+  if (!tabId) return fallback();
+  const send = () => {
+    chrome.tabs.sendMessage(tabId, { action: "twpDock", view }, { frameId: 0 }, (answer) => {
+      if (chrome.runtime.lastError || !answer) fallback();
+    });
+    // Volet déjà ouvert : il reprend le nouveau texte.
+    if (draft) chrome.runtime.sendMessage({ action: "composerDraftUpdated" }, () => void chrome.runtime.lastError);
+  };
+  if (draft) chrome.storage.local.set({ composerDraft: draft }, send);
+  else send();
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab) return;
   const frame = { frameId: info.frameId || 0 };
@@ -105,9 +121,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       checkedLastError
     );
   } else if (info.menuItemId === MENU.composer) {
-    openComposer(tab.id);
+    openDock(tab.id, "composer");
   } else if (info.menuItemId === MENU.key) {
-    openKeyPage();
+    openDock(tab.id, "setup");
   } else if (String(info.menuItemId).startsWith("twp-lang-")) {
     // Le menu est recréé par le rappel de changement de configuration ci-dessous.
     twpConfig.set("targetLanguage", String(info.menuItemId).slice("twp-lang-".length));
@@ -146,7 +162,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === "thisFrameIsInFocus") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "anotherFrameIsInFocus" }, checkedLastError);
   } else if (request.action === "twpOpenComposer") {
-    openComposer(sender.tab ? sender.tab.id : null, request.text);
+    openDock(sender.tab ? sender.tab.id : null, "composer", request.text);
+  } else if (request.action === "twpFallbackWindow") {
+    // Le volet n'a pas pu s'afficher (règles de la page) : fenêtre séparée.
+    if (request.view === "setup") openKeyPage();
+    else openComposer(sender.tab ? sender.tab.id : null);
   }
 });
 

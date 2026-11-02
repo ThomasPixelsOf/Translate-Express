@@ -15,7 +15,7 @@
   "permissions": ["storage", "contextMenus"],
   "web_accessible_resources": [
     {
-      "resources": ["/contentScript/css/*", "/_locales/*"],
+      "resources": ["/contentScript/css/*", "/_locales/*", "/composer/*", "/setup/*"],
       "matches": ["<all_urls>"]
     }
   ],

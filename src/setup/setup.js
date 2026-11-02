@@ -83,6 +83,19 @@
     };
   }
 
+  // Dans le volet de la page : lien de retour vers la fenêtre de message et signal « prêt ».
+  if (new URLSearchParams(location.search).get("dock") === "1") {
+    $("#back").hidden = false;
+    $("#back a").onclick = (e) => {
+      e.preventDefault();
+      window.parent.postMessage({ twp: "navigate", view: "composer" }, "*");
+    };
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") window.parent.postMessage({ twp: "close" }, "*");
+    });
+    window.parent.postMessage({ twp: "ready" }, "*");
+  }
+
   twpConfig.onReady(() => {
     initLanguage();
     const llm = twpConfig.get("customServices").find((cs) => cs.name === "llm");

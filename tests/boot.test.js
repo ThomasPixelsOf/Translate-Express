@@ -13,6 +13,7 @@ function fauxChrome() {
   const menus = [];
   const handlers = { onMessage: [], onClicked: [], onInstalled: [], onStartup: [] };
   const stockage = {};
+  const etat = { dockAnswer: true, tabMessages: [], windowsCreated: [] };
   const chrome = {
     runtime: {
       onMessage: { addListener: (f) => handlers.onMessage.push(f) },
@@ -37,10 +38,10 @@ function fauxChrome() {
       update: (id, p, cb) => { const m = menus.find((x) => x.id === id); if (m) Object.assign(m, p); cb && cb(); },
       onClicked: { addListener: (f) => handlers.onClicked.push(f) },
     },
-    tabs: { sendMessage: () => {}, detectLanguage: (id, cb) => cb("en"), query: (q, cb) => cb([]) },
-    windows: { create: () => Promise.resolve(), getAll: () => Promise.resolve([]), update: () => Promise.resolve() },
+    tabs: { sendMessage: (id, msg, opts, cb) => { etat.tabMessages.push({ id, msg }); const f = typeof opts === "function" ? opts : cb; if (f) f(etat.dockAnswer); }, detectLanguage: (id, cb) => cb("en"), query: (q, cb) => cb([]) },
+    windows: { create: (o) => { etat.windowsCreated.push(o); return Promise.resolve(); }, getAll: () => Promise.resolve([]), update: () => Promise.resolve() },
   };
-  return { chrome, menus, handlers, stockage };
+  return { chrome, menus, handlers, stockage, etat };
 }
 
 function demarrer() {
@@ -121,4 +122,23 @@ test("choisir une langue dans le menu change la langue cible partout et met le m
   assert.equal(vm.runInContext('twpConfig.get("targetLanguage")', sandbox), "de");
   assert.equal(menus.find((m) => m.id === "twp-lang-de").checked, true);
   assert.match(menus.find((m) => m.id === "twp-page").title, /^Translate this page to /);
+});
+
+test("« Message window » s'ouvre dans un volet de la page, et en fenêtre seulement si la page ne peut pas l'accueillir", async () => {
+  const { sandbox, handlers, etat } = demarrer();
+  chargerBg(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  handlers.onInstalled.forEach((f) => f());
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-composer", frameId: 0 }, { id: 7 }));
+  assert.deepEqual(JSON.parse(JSON.stringify(etat.tabMessages.at(-1))), { id: 7, msg: { action: "twpDock", view: "composer" } });
+  assert.equal(etat.windowsCreated.length, 0, "pas de fenêtre quand le volet répond");
+
+  etat.dockAnswer = undefined; // page qui ne peut pas recevoir le volet (page du navigateur, PDF...)
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-composer", frameId: 0 }, { id: 7 }));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(etat.windowsCreated.length, 1);
+  assert.match(etat.windowsCreated[0].url, /composer[/]composer[.]html/);
+
+  handlers.onClicked.forEach((f) => f({ menuItemId: "twp-key", frameId: 0 }, { id: 7 }));
+  assert.match(etat.windowsCreated.at(-1).url, /setup[/]setup[.]html/);
 });
