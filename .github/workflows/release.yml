@@ -1,0 +1,38 @@
+name: Release
+
+# Pushing a tag such as v1.0.0 builds translate-express-<tag>.zip (the contents of src/) and publishes it as a GitHub release.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the tag matches manifest.json
+        run: |
+          version=$(jq -r .version src/manifest.json)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match manifest version $version" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: node --test tests/
+
+      - name: Build the zip
+        run: (cd src && zip -r -q "../translate-express-$GITHUB_REF_NAME.zip" .)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "translate-express-$GITHUB_REF_NAME.zip" \
+            --title "Translate Express $GITHUB_REF_NAME" \
+            --generate-notes
