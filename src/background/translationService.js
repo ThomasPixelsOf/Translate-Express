@@ -304,27 +304,13 @@ const translationService = (function () {
           currentTranslationsInProgress.push(progressInfo);
           this.translationsInProgress.set(requestHash, progressInfo);
 
-          //cast
-          const cacheEntry = await translationCache.get(
-            this.serviceName,
-            sourceLanguage,
-            targetLanguage,
-            requestString,
-          );
-          if (cacheEntry) {
-            progressInfo.translatedText = cacheEntry.translatedText;
-            progressInfo.detectedLanguage = cacheEntry.detectedLanguage;
-            progressInfo.status = "complete";
-            //this.translationsInProgress.delete([sourceLanguage, targetLanguage, requestString])
-          } else {
-            if (currentRequest.length > 0 && currentSize + progressInfo.originalText.length > (this.maxRequestSize || 800)) {
-              requests.push(currentRequest);
-              currentSize = 0;
-              currentRequest = [];
-            }
-            currentRequest.push(progressInfo);
-            currentSize += progressInfo.originalText.length;
+          if (currentRequest.length > 0 && currentSize + progressInfo.originalText.length > (this.maxRequestSize || 800)) {
+            requests.push(currentRequest);
+            currentSize = 0;
+            currentRequest = [];
           }
+          currentRequest.push(progressInfo);
+          currentSize += progressInfo.originalText.length;
         }
       }
 
@@ -391,13 +377,10 @@ const translationService = (function () {
     /**
      * Translates the `sourceArray2d`.
      *
-     * If `dontSaveInPersistentCache` is **true** then the translation result will not be saved in the on-disk translation cache, only in the in-memory cache.
-     *
      * The `dontSortResults` parameter is only valid when using the ***google*** translation service, if its value is **true** then the translation result will not be sorted.
      * @param {string} sourceLanguage
      * @param {string} targetLanguage
      * @param {Array<string[]>} sourceArray2d
-     * @param {boolean} dontSaveInPersistentCache
      * @param {boolean} dontSortResults
      * @returns {Promise<string[][]>}
      */
@@ -405,7 +388,6 @@ const translationService = (function () {
       sourceLanguage,
       targetLanguage,
       sourceArray2d,
-      dontSaveInPersistentCache = false,
       dontSortResults = false,
       options = {},
     ) {
@@ -429,20 +411,6 @@ const translationService = (function () {
                 transInfo.detectedLanguage = result.detectedLanguage || "und";
                 transInfo.translatedText = result.text;
                 transInfo.status = "complete";
-
-                if (
-                  dontSaveInPersistentCache === false &&
-                  transInfo.translatedText
-                ) {
-                  translationCache.set(
-                    this.serviceName,
-                    sourceLanguage,
-                    targetLanguage,
-                    transInfo.originalText,
-                    transInfo.translatedText,
-                    transInfo.detectedLanguage,
-                  );
-                }
               }
             })
             .catch((e) => {
@@ -710,7 +678,6 @@ const translationService = (function () {
       sourceLanguage,
       targetLanguage,
       sourceArray2d,
-      dontSaveInPersistentCache,
       dontSortResults = false,
       options = {},
     ) {
@@ -741,7 +708,6 @@ const translationService = (function () {
         sourceLanguage,
         targetLanguage,
         sourceArray2d,
-        dontSaveInPersistentCache,
         dontSortResults,
         options,
       );
@@ -778,7 +744,6 @@ const translationService = (function () {
     sourceLanguage,
     targetLanguage,
     sourceArray2d,
-    dontSaveInPersistentCache = false,
     dontSortResults = false,
     priority = "high",
   ) => {
@@ -794,7 +759,7 @@ const translationService = (function () {
     const tDebut = Date.now();
     const stats = { sent: 0, failed: 0, fallbackOk: 0 };
     const translateWith = async (svc, blocks) => {
-      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSaveInPersistentCache, dontSortResults, { priority });
+      const res = await svc.translate(sourceLanguage, targetLanguage, blocks, dontSortResults, { priority });
       return blocks.map((_, i) => (res && Array.isArray(res[i]) ? res[i] : [])); // a service without an answer = empty blocks
     };
 
@@ -849,7 +814,6 @@ const translationService = (function () {
     sourceLanguage,
     targetLanguage,
     sourceArray,
-    dontSaveInPersistentCache = false,
   ) => {
     serviceName = twpLang.getAlternativeService(
       targetLanguage,
@@ -862,7 +826,6 @@ const translationService = (function () {
         sourceLanguage,
         targetLanguage,
         sourceArray.map((text) => [text]),
-        dontSaveInPersistentCache,
       )
     ).map((result) => result[0]);
   };
@@ -872,7 +835,6 @@ const translationService = (function () {
     sourceLanguage,
     targetLanguage,
     originalText,
-    dontSaveInPersistentCache = false,
   ) => {
     serviceName = twpLang.getAlternativeService(
       targetLanguage,
@@ -885,20 +847,11 @@ const translationService = (function () {
         sourceLanguage,
         targetLanguage,
         [[originalText]],
-        dontSaveInPersistentCache,
       )
     )[0][0];
   };
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // If the translation request came from an incognito window, the translation should not be cached on disk.
-    let dontSaveInPersistentCache = true;
-    if (twpConfig.get("enableDiskCache") !== "yes") {
-      dontSaveInPersistentCache = true;
-    } else {
-      dontSaveInPersistentCache = sender.tab ? sender.tab.incognito : false;
-    }
-
     if (request.action === "translateHTML") {
       translationService
         .translateHTML(
@@ -906,7 +859,6 @@ const translationService = (function () {
           request.sourceLanguage,
           request.targetLanguage,
           request.sourceArray2d,
-          dontSaveInPersistentCache,
           request.dontSortResults,
           request.priority,
         )
@@ -919,7 +871,6 @@ const translationService = (function () {
             request.sourceLanguage,
             request.targetLanguage,
             request.sourceArray2d,
-            dontSaveInPersistentCache,
             request.dontSortResults,
             request.priority,
           );
@@ -938,7 +889,6 @@ const translationService = (function () {
           request.sourceLanguage,
           request.targetLanguage,
           request.sourceArray,
-          dontSaveInPersistentCache,
         )
         .then((results) => sendResponse(results))
         .catch((e) => {
@@ -954,7 +904,6 @@ const translationService = (function () {
           request.sourceLanguage,
           request.targetLanguage,
           request.source,
-          dontSaveInPersistentCache,
         )
         .then((results) => sendResponse(results))
         .catch((e) => {

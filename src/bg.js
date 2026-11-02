@@ -9,7 +9,6 @@ importScripts("/lib/ui-text.js");
 importScripts("/lib/ui/en.js");
 importScripts("/lib/ui/fr.js");
 importScripts("/background/diagnostics.js");
-importScripts("/background/translationCache.js");
 importScripts("/background/llmService.js");
 importScripts("/background/skipTargetLanguage.js");
 importScripts("/background/translationService.js");

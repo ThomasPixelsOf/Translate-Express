@@ -9,7 +9,7 @@
 // To turn off: remove the "devReload.js" line from bg.js (and the "alarms" permission from the manifest).
 
 const DEV_FILES = [
-  "/background/devReload.js", "/background/diagnostics.js", "/background/llmService.js", "/background/menu.js", "/background/skipTargetLanguage.js", "/background/translationCache.js",
+  "/background/devReload.js", "/background/diagnostics.js", "/background/llmService.js", "/background/menu.js", "/background/skipTargetLanguage.js",
   "/background/translationService.js", "/bg.js", "/composer/composer.css", "/composer/composer.html", "/composer/composer.js",
   "/contentScript/css/showOriginal.css", "/contentScript/pageTranslator.js", "/contentScript/panel.js", "/contentScript/showOriginal.js",
   "/lib/XMLHttpRequestShim.js", "/lib/checkedLastError.js", "/lib/config.js", "/lib/ui-text.js", "/lib/ui/en.js", "/lib/ui/fr.js", "/lib/languages.js", "/lib/platformInfo.js",

@@ -282,7 +282,6 @@ test("if the AI fails, the page is translated by Google instead of staying empty
   const { sandbox, handlers } = boot();
   loadBackground(sandbox);
   await new Promise((r) => setTimeout(r, 50));
-  vm.runInContext("translationCache.get = async () => null; translationCache.set = async () => {};", sandbox);
   const urls = [];
   sandbox.fetch = async (url) => {
     urls.push(String(url));
@@ -489,7 +488,6 @@ async function bootWithAi(fetchIa) {
   const { sandbox, handlers } = boot();
   loadBackground(sandbox);
   await new Promise((r) => setTimeout(r, 50));
-  vm.runInContext("translationCache.get = async () => null; translationCache.set = async () => {};", sandbox);
   vm.runInContext("twpConfig.set('customServices', [" + JSON.stringify(llmKey) + "]); twpConfig.set('pageTranslatorService', 'llm');", sandbox);
   sandbox.fetch = async (url, init) => {
     if (String(url).endsWith("/models")) return { ok: true, status: 200, json: async () => ({ data: [{ id: "llama-3.3-70b-versatile" }] }) };
