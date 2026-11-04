@@ -64,7 +64,7 @@ function createPageWithFrame() {
     w.Range.prototype.getClientRects = () => [rect];
     w.Range.prototype.getBoundingClientRect = () => rect;
     w.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 10, right: 310, top: 200, bottom: 260, width: 300, height: 60 });
-    for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js"]) w.eval(read(f) + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
+    for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js", "lib/logo.js"]) w.eval(read(f) + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
   }
   // a simulated page does not tie `event.source` to the window that posted the message, as a real browser does: do it here
   const deliver = (target, source) => (data) => setTimeout(() => target.dispatchEvent(new target.MessageEvent("message", { data, source, origin: "https://exemple.test" })), 0);

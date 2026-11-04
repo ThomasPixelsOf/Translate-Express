@@ -527,3 +527,14 @@ test("resilience: a failed request does not lose the other blocks of the page", 
   assert.match(r[0][0], /^TRANSLATED-A /, "the block whose request succeeded is translated");
   assert.deepEqual(r[1], [], "the failed block is returned empty (the page will retry it), without making the rest fail");
 });
+
+test("a message that does not come from a tab is answered without an error (no sender.tab)", async () => {
+  const { sandbox, handlers } = boot();
+  loadBackground(sandbox);
+  await new Promise((r) => setTimeout(r, 50));
+  for (const action of ["getMainFramePageLanguageState", "twpFramePanel", "twpReplaceInFrame"]) {
+    let answered = "no answer";
+    assert.doesNotThrow(() => handlers.onMessage.forEach((f) => f({ action }, {}, (a) => { answered = a; })), action);
+    assert.equal(answered, undefined, action);
+  }
+});

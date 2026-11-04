@@ -42,7 +42,7 @@ function createPage({ showBubbleSetting = "yes" } = {}) {
   w.Range.prototype.getClientRects = () => [rect];
   w.Range.prototype.getBoundingClientRect = () => rect;
   w.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 10, right: 310, top: 200, bottom: 260, width: 300, height: 60 });
-  for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js"]) w.eval(fs.readFileSync(path.join(__dirname, "..", "src", f), "utf8") + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
+  for (const f of ["lib/ui-text.js", "lib/ui/en.js", "lib/ui/fr.js", "lib/logo.js"]) w.eval(fs.readFileSync(path.join(__dirname, "..", "src", f), "utf8") + ";window.twpUi = typeof twpUi !== 'undefined' ? twpUi : window.twpUi;");
   w.eval(CODE);
   const doc = w.document;
   return {
@@ -218,7 +218,7 @@ test("the bubble shows the extension's logo, and falls back to a letter without 
     await wait(40);
     const img = page.bubble().shadowRoot.querySelector("img");
     assert.ok(img, "the bubble contains the logo");
-    assert.match(img.src, /\/icons\/icon-32\.png$/);
+    assert.match(img.src, /^data:image\/png;base64,/, "the logo comes from the code, not from a chrome-extension:// address");
     img.dispatchEvent(new page.w.Event("error"));
     assert.equal(page.bubble().shadowRoot.querySelector("img"), null, "icon failed: the image is removed");
     assert.equal(page.bubble().shadowRoot.querySelector("button").textContent, "A", "and the letter takes over");

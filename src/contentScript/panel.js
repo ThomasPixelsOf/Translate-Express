@@ -544,7 +544,7 @@
       const logo = document.createElement("img");
       logo.alt = "";
       logo.addEventListener("error", () => { logo.remove(); el.classList.add("letter"); el.textContent = "A"; });
-      try { logo.src = chrome.runtime.getURL("/icons/icon-32.png"); el.appendChild(logo); } catch (e) { el.classList.add("letter"); el.textContent = "A"; }
+      try { logo.src = TWP_LOGO; el.appendChild(logo); } catch (e) { el.classList.add("letter"); el.textContent = "A"; }
       // The selection must survive the click on the bubble.
       el.addEventListener("mousedown", (e) => e.preventDefault());
       el.addEventListener("click", () => {

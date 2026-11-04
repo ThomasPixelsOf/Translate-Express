@@ -205,6 +205,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 // Messages from page scripts (the page translator needs them to know the language and the tab state).
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Only page scripts need the answers below: a message that does not come from a tab has nothing to act on.
+  const needsTab = ["getMainFramePageLanguageState", "twpFramePanel", "twpReplaceInFrame"];
+  if (needsTab.includes(request.action) && !(sender.tab && sender.tab.id !== undefined)) {
+    sendResponse(undefined);
+    return;
+  }
   if (request.action === "getMainFramePageLanguageState") {
     chrome.tabs.sendMessage(sender.tab.id, { action: "getCurrentPageLanguageState" }, { frameId: 0 }, (state) => {
       checkedLastError();

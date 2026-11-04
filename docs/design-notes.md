@@ -99,6 +99,7 @@ What is done (all covered by `tests/security.test.js` and `tests/llmService.test
 - It is only sent over HTTPS (plain HTTP only to a server on this machine), in the `Authorization` header, to the provider's address. A key recognized as `gsk_` always goes to Groq's fixed address.
 - The settings page never writes the saved key back into the page: the field stays empty ("Key saved (hidden)") and a newly typed key replaces the old one.
 - The diagnostic log and its copyable report mask anything that looks like a key (`gsk_...`, `sk-...`, `Bearer ...`) before an event is stored.
+- No resource is exposed to web pages (`web_accessible_resources` is absent): a site cannot detect the extension that way, and the selection logo is drawn from a data address in `src/lib/logo.js`, so a page's Content Security Policy cannot refuse it.
 - The extension pages have a strict Content Security Policy (`script-src 'self'; object-src 'self'; base-uri 'none'`).
 
 What is not done, and why: the key is stored in clear in the browser profile. An extension cannot protect a secret from someone who has access to the profile or from malware on the machine: encrypting it would need a key stored next to it (obfuscation, not security) or a passphrase typed at every browser start. Use a dedicated Groq key that you can revoke from Groq's console.
@@ -185,6 +186,6 @@ bun test
 
 ## Good to know
 
-- The tests (116) check the AI service, the manifest, the service worker start, the menu, the bubble and the panel (also across frames), page translation, the popup views, the settings page, the language names and the dashboard. Some use fake `chrome` objects; those that need a page use happy-dom (`tests/dom.js`), which runs under Bun and under Node (both are run on every push, and Bun gates a release). They do not replace a try in the browser.
+- The tests (118) check the AI service, the manifest, the service worker start, the menu, the bubble and the panel (also across frames), page translation, the popup views, the settings page, the language names and the dashboard. Some use fake `chrome` objects; those that need a page use happy-dom (`tests/dom.js`), which runs under Bun and under Node (both are run on every push, and Bun gates a release). They do not replace a try in the browser.
 - Probable cause of Google's slowness: the original service fetches an unofficial key from a JavaScript file of Google (address hard-coded).
 - Not done: automatically sending back to Groq the texts that came back unchanged.

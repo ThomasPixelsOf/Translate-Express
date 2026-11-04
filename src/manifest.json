@@ -15,12 +15,6 @@
   },
   "host_permissions": ["<all_urls>"],
   "permissions": ["storage", "contextMenus", "alarms"],
-  "web_accessible_resources": [
-    {
-      "resources": ["/icons/*"],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -35,6 +29,7 @@
         "/lib/ui-text.js",
         "/lib/ui/en.js",
         "/lib/ui/fr.js",
+        "/lib/logo.js",
         "/contentScript/pageTranslator.js",
         "/contentScript/panel.js"
       ]

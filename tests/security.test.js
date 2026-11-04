@@ -91,3 +91,11 @@ test("the manifest has a strict policy for the extension's pages", () => {
   assert.match(csp, /base-uri 'none'/);
   assert.ok(!/unsafe-eval|unsafe-inline/.test(csp));
 });
+
+test("nothing is exposed to web pages, and the logo in the code is the real icon", () => {
+  const m = JSON.parse(read("manifest.json"));
+  assert.equal(m.web_accessible_resources, undefined, "no web_accessible_resources: a site cannot detect the extension through them");
+  const logo = read("lib/logo.js").match(/"data:image\/png;base64,([A-Za-z0-9+/=]+)"/);
+  assert.ok(logo, "lib/logo.js holds a PNG data address");
+  assert.ok(Buffer.from(logo[1], "base64").equals(fs.readFileSync(path.join(SRC, "icons", "icon-32.png"))), "it is exactly icons/icon-32.png");
+});
